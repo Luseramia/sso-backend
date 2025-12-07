@@ -5,7 +5,7 @@ const { randomBytes, createPublicKey, verify, createCipheriv } = await import(
 );
 import sodium from "libsodium-wrappers";
 // import sodium from "libsodium-wrappers-sumo";
-
+const VAULT_TOKEN = await Bun.file("/vault/secrets/token").text();
 import { Buffer } from "node:buffer";
 await sodium.ready;
 
@@ -256,7 +256,7 @@ async function requestJWTFromVault(dataBase64: string) {
       {
         method: "POST",
         headers: {
-          "X-Vault-Token":"",
+          "X-Vault-Token": VAULT_TOKEN,
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
