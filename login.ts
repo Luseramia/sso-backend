@@ -7,7 +7,6 @@ import sodium from "libsodium-wrappers";
 // import sodium from "libsodium-wrappers-sumo";
 
 import { Buffer } from "node:buffer";
-import { print } from "ioredis";
 await sodium.ready;
 
 export const ssoController = new Elysia().group("/sso", (app) =>
@@ -69,6 +68,7 @@ export const ssoController = new Elysia().group("/sso", (app) =>
           c.set.status = 400;
           return { error: "Invalid signature" };
         }
+
         authData.status = "verified";
         authData.verifiedAt = new Date().toISOString();
 
@@ -94,8 +94,6 @@ export const ssoController = new Elysia().group("/sso", (app) =>
           }
 
           const authData = JSON.parse(data);
-          console.log("authData.status", authData.status);
-          console.log("authData.encryptedToken", authData.encryptedToken);
 
           // ตรวจสอบ challenge
           if (authData.challenge !== challenge) {
@@ -106,7 +104,6 @@ export const ssoController = new Elysia().group("/sso", (app) =>
           if (authData.status === "approved" && authData.encryptedToken) {
             // ลบออกจาก Redis (one-time use)
             await redis.del(`auth:pending:${uuid}`);
-
             return {
               status: "approved",
               encryptedToken: authData.encryptedToken,
@@ -138,7 +135,7 @@ export const ssoController = new Elysia().group("/sso", (app) =>
         const { uuid } = c.body;
         console.log("uuid", uuid);
 
-        const data = await redis.get(`auth:pending:${uuid}`)
+        const data = await redis.get(`auth:pending:${uuid}`);
         if (!data) {
           c.set.status = 404;
           return { error: "Request not found" };
@@ -154,11 +151,10 @@ export const ssoController = new Elysia().group("/sso", (app) =>
         console.log("dataBase64", dataBase64 + "." + jwt["data"]["signature"]);
 
         const encryptedToken = await encryptJWT(
-          dataBase64+'.'+jwt["data"]["signature"],
+          dataBase64 + "." + jwt["data"]["signature"],
           authData.publicKey,
           authData.algorithm
         );
-        console.log(encryptedToken);
 
         authData.status = "approved";
         authData.encryptedToken = encryptedToken;
@@ -178,7 +174,7 @@ export const ssoController = new Elysia().group("/sso", (app) =>
       "/reject-uuid",
       async (c) => {
         const { uuid } = c.body;
-        const data = await redis.get(`auth:pending:${uuid}`)
+        const data = await redis.get(`auth:pending:${uuid}`);
         if (!data) {
           c.set.status = 404;
           return { error: "Request not found" };
@@ -255,14 +251,12 @@ function verifySignature(
 
 async function requestJWTFromVault(dataBase64: string) {
   try {
-    console.log("dataBase64", dataBase64);
-
     const response = await fetch(
       "http://192.168.1.102:8200/v1/sso/sign/login/sha3-512",
       {
         method: "POST",
         headers: {
-          "X-Vault-Token": "",
+          "X-Vault-Token":"",
           "Content-Type": "application/json",
         },
         body: JSON.stringify({

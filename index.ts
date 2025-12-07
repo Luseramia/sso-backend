@@ -9,7 +9,7 @@ const app = new Elysia()
   .use(ssoController)
   .use(
     cors({
-      origin:'*'
+      origin: "*",
       // origin: "http://localhost:5173",
     })
   )
