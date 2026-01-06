@@ -5,7 +5,8 @@ const { randomBytes, createPublicKey, verify, createCipheriv } = await import(
 );
 import sodium from "libsodium-wrappers";
 // import sodium from "libsodium-wrappers-sumo";
-const VAULT_TOKEN = await Bun.file("/vault/secrets/token").text();
+// const VAULT_TOKEN = await Bun.file("/vault/secrets/token").text() || '' ;
+const VAULT_TOKEN = " ";
 import { Buffer } from "node:buffer";
 await sodium.ready;
 
@@ -103,13 +104,13 @@ export const ssoController = new Elysia().group("/sso", (app) =>
 
           if (authData.status === "approved" && authData.encryptedToken) {
             // ลบออกจาก Redis (one-time use)
-            await redis.del(`auth:pending:${uuid}`);
+            await redis.del(`auth:signed:${uuid}`);
             return {
               status: "approved",
               encryptedToken: authData.encryptedToken,
             };
           } else if (authData.status === "rejected") {
-            await redis.del(`auth:pending:${uuid}`);
+            await redis.del(`auth:signed:${uuid}`);
             c.set.status = 200;
             return { status: "rejected" };
           } else {
@@ -214,6 +215,11 @@ export const ssoController = new Elysia().group("/sso", (app) =>
       );
       return result;
     })
+    .get("/test", async (c) => {
+      console.log('test');
+      
+    }),
+
 );
 
 function verifySignature(
