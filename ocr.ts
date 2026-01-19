@@ -1,5 +1,5 @@
 import { Elysia, t } from "elysia";
-import { ocrClient, type ImageRequest, type BatchImageRequest, type OCRResult, type BatchOCRResult } from "./grpc-client";
+import { ocrClient, type ImageRequest, type BatchImageRequest, type MultiImageRequest, type OCRResult, type BatchOCRResult } from "./grpc-client";
 
 export const ocrController = new Elysia().group("/ocr", (app) =>
     app
@@ -79,6 +79,50 @@ export const ocrController = new Elysia().group("/ocr", (app) =>
             {
                 body: t.Object({
                     images: t.Files()
+                })
+            }
+        )
+        .post(
+            "/process-images",
+            async ({ body, set }) => {
+                const { images, username, type_of_expense } = body;
+
+                if (!images || images.length === 0) {
+                    set.status = 400;
+                    return { error: "At least one image is required" };
+                }
+
+                const imageFiles = Array.isArray(images) ? images : [images];
+                const imageBuffers: Buffer[] = [];
+
+                for (const file of imageFiles) {
+                    const arrayBuffer = await file.arrayBuffer();
+                    imageBuffers.push(Buffer.from(arrayBuffer));
+                }
+
+                return new Promise((resolve, reject) => {
+                    const request: MultiImageRequest = {
+                        image_data: imageBuffers,
+                        username: username,
+                        type_of_expense: type_of_expense
+                    };
+
+                    ocrClient.ProcessImages(request, (error: any, response: BatchOCRResult) => {
+                        if (error) {
+                            console.error("gRPC Error:", error);
+                            set.status = 500;
+                            resolve({ error: error.message || "Internal Server Error" });
+                        } else {
+                            resolve(response);
+                        }
+                    });
+                });
+            },
+            {
+                body: t.Object({
+                    images: t.Files(),
+                    username: t.String(),
+                    type_of_expense: t.String()
                 })
             }
         )

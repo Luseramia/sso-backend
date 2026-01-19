@@ -7,17 +7,17 @@ import { tokenChecker } from "./authorize";
 import { cors } from "@elysiajs/cors";
 
 const app = new Elysia()
-  .onBeforeHandle(async (c) => {
-    if (!c.headers.authorization) {
-      c.set.status = 401;
-      return { error: "unauthorize" };
-    }
-    if (!(await tokenChecker(c.headers.authorization))) {
-      c.set.status = 403;
-      return { error: "Forbiden" };
-    }
-  })
   .use(ssoController)
+  // .onBeforeHandle(async (c) => {
+  //   if (!c.headers.authorization) {
+  //     c.set.status = 401;
+  //     return { error: "unauthorize" };
+  //   }
+  //   if (!(await tokenChecker(c.headers.authorization))) {
+  //     c.set.status = 403;
+  //     return { error: "Forbiden" };
+  //   }
+  // })
   .use(ocrController)
   // .use(AuthorizationController)
   .use(
