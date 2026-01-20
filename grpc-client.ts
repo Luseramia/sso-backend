@@ -15,8 +15,8 @@ const packageDefinition = protoLoader.loadSync(PROTO_PATH, {
 const protoDescriptor = grpc.loadPackageDefinition(packageDefinition);
 const ocrPackage = protoDescriptor.ocr as any;
 
-// const GRPC_SERVER_URL = process.env.OCR_GRPC_URL || '192.168.1.109:50051';
-const GRPC_SERVER_URL = process.env.OCR_GRPC_URL || "0.0.0.0:5000";
+const GRPC_SERVER_URL = process.env.OCR_GRPC_URL || '192.168.1.109:50051';
+// const GRPC_SERVER_URL = process.env.OCR_GRPC_URL || "0.0.0.0:5000";
 
 export const ocrClient = new ocrPackage.OCRService(
   GRPC_SERVER_URL,

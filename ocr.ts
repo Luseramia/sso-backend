@@ -1,5 +1,17 @@
 import { Elysia, t } from "elysia";
 import { ocrClient, type ImageRequest, type BatchImageRequest, type MultiImageRequest, type OCRResult, type BatchOCRResult } from "./grpc-client";
+import * as grpc from "@grpc/grpc-js";
+
+await new Promise((resolve, reject) => {
+  grpc.waitForClientReady(
+    ocrClient,
+    Date.now() + 5000,
+    (err: any) => {
+      if (err) reject(err);
+      else resolve(true);
+    }
+  );
+});
 
 export const ocrController = new Elysia().group("/ocr", (app) =>
     app
