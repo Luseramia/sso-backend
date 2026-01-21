@@ -3,8 +3,7 @@ import { redis } from "./redis";
 const { randomBytes, createPublicKey, verify, createCipheriv } = await import(
   "node:crypto"
 );
-// import sodium from "libsodium-wrappers";
-import sodium from "libsodium-wrappers-sumo";
+import sodium from "libsodium-wrappers";
 
 // import sodium from "libsodium-wrappers-sumo";
 // const VAULT_TOKEN = await Bun.file("/vault/secrets/token").text() || '' ;
