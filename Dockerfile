@@ -1,5 +1,5 @@
 # ใช้ Bun official image
-FROM oven/bun:1.3
+FROM oven/bun:1.3.5
 
 # ตั้ง working directory
 WORKDIR /app
