@@ -5,12 +5,12 @@ FROM oven/bun:1.3.5
 WORKDIR /app
 
 # คัดลอกไฟล์ dependency ก่อน (เพื่อให้ Docker cache การติดตั้งได้)
-COPY  package.json ./
+# COPY  package.json ./
 
-# ติดตั้ง dependencies
-RUN bun install
-# COPY package.json bun.lockb* ./
-# RUN bun install --frozen-lockfile --production
+# # ติดตั้ง dependencies
+# RUN bun install
+COPY package.json bun.lockb* ./
+RUN bun install --frozen-lockfile --production
 
 # คัดลอกซอร์สโค้ดทั้งหมด
 COPY . .
