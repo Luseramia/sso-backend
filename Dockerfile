@@ -9,6 +9,8 @@ COPY  package.json ./
 
 # ติดตั้ง dependencies
 RUN bun install
+# COPY package.json bun.lockb* ./
+# RUN bun install --frozen-lockfile --production
 
 # คัดลอกซอร์สโค้ดทั้งหมด
 COPY . .
@@ -17,4 +19,4 @@ COPY . .
 EXPOSE 3000
 
 # รันแอป (Bun รองรับ TypeScript โดยตรง ไม่ต้อง build)
-CMD ["bun", "index.ts"]
+CMD ["bun","run", "index.ts"]
