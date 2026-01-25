@@ -1,7 +1,6 @@
 import { Elysia, t } from "elysia";
 import type { StringOutputFormat } from "libsodium-wrappers";
-const VAULT_TOKEN =
-  "hvs.CAESIGZB-Uoi3rih1G_EckVgAOdvSscf6mPhlizZiiRUStomGh4KHGh2cy5PU3BvWFFHa1dXbXFsRlBRWlZIbGxCbUc";
+const VAULT_TOKEN = await Bun.file("/vault/secrets/token").text() || '' ;
 export const tokenChecker = async (bearerToken: string): Promise<boolean> => {
   try {
     const token = bearerToken.replace("Bearer ", "");
