@@ -1,13 +1,12 @@
 import { Elysia, t } from "elysia";
 import { redis } from "./redis";
-const { randomBytes, createPublicKey, verify, createCipheriv } = await import(
-  "node:crypto"
-);
+const { randomBytes, createPublicKey, verify, createCipheriv } =
+  await import("node:crypto");
 import sodium from "libsodium-wrappers";
 
 // import sodium from "libsodium-wrappers-sumo";
-// const VAULT_TOKEN = await Bun.file("/vault/secrets/token").text() || '' ;
-const VAULT_TOKEN = " ";
+const VAULT_TOKEN = await Bun.file("/vault/secrets/token").text() || '' ;
+// const VAULT_TOKEN = " ";
 import { Buffer } from "node:buffer";
 await sodium.ready;
 
@@ -32,7 +31,7 @@ export const ssoController = new Elysia().group("/sso", (app) =>
             requestedAt: new Date(),
           }),
           "EX",
-          60
+          60,
         );
 
         return { challenge };
@@ -43,7 +42,7 @@ export const ssoController = new Elysia().group("/sso", (app) =>
           publicKey: t.String(),
           algorithm: t.String(),
         }),
-      }
+      },
     )
     .post(
       "/verify-device",
@@ -63,7 +62,7 @@ export const ssoController = new Elysia().group("/sso", (app) =>
           challenge,
           signature,
           authData.publicKey,
-          authData.algorithm
+          authData.algorithm,
         );
 
         if (!isValid) {
@@ -82,7 +81,7 @@ export const ssoController = new Elysia().group("/sso", (app) =>
           challenge: t.String(),
           signature: t.String(),
         }),
-      }
+      },
     )
     .post(
       "/poll-jwt",
@@ -129,7 +128,7 @@ export const ssoController = new Elysia().group("/sso", (app) =>
           uuid: t.String(),
           challenge: t.String(),
         }),
-      }
+      },
     )
     .post(
       "/approve-uuid",
@@ -148,15 +147,18 @@ export const ssoController = new Elysia().group("/sso", (app) =>
           return { error: "Device not verified" };
         }
         const dataBase64 = Buffer.from(data).toString("base64");
+        //         jwttttt {
+        //   errors: [ "permission denied" ],
+        // }
         const jwt = (await requestJWTFromVault(dataBase64)) as any;
-        console.log('jwttttt',jwt);
-        
+        console.log("jwttttt", jwt);
+
         console.log("dataBase64", dataBase64 + "." + jwt["data"]["signature"]);
 
         const encryptedToken = await encryptJWT(
           dataBase64 + "." + jwt["data"]["signature"],
           authData.publicKey,
-          authData.algorithm
+          authData.algorithm,
         );
 
         authData.status = "approved";
@@ -171,7 +173,7 @@ export const ssoController = new Elysia().group("/sso", (app) =>
         body: t.Object({
           uuid: t.String(),
         }),
-      }
+      },
     )
     .post(
       "/reject-uuid",
@@ -200,7 +202,7 @@ export const ssoController = new Elysia().group("/sso", (app) =>
         body: t.Object({
           uuid: t.String(),
         }),
-      }
+      },
     )
     .get("/pending-uuids", async (c) => {
       const keys = await redis.keys("*");
@@ -213,22 +215,20 @@ export const ssoController = new Elysia().group("/sso", (app) =>
           const uuid = key.replace("auth:pending:", "");
 
           return { uuid, ttl };
-        })
+        }),
       );
       return result;
     })
     .get("/test", async (c) => {
-      console.log('test');
-      
+      console.log("test");
     }),
-
 );
 
 function verifySignature(
   message: string,
   signatureBase64: string,
   publicKeyBase64: string,
-  algorithm: string
+  algorithm: string,
 ) {
   const messageBuffer = Buffer.from(message, "utf8");
   const signatureBuffer = Buffer.from(signatureBase64, "base64");
@@ -259,6 +259,7 @@ function verifySignature(
 
 async function requestJWTFromVault(dataBase64: string) {
   try {
+    
     const response = await fetch(
       "http://192.168.1.102:8200/v1/sso/sign/login/sha3-512",
       {
@@ -270,7 +271,7 @@ async function requestJWTFromVault(dataBase64: string) {
         body: JSON.stringify({
           input: dataBase64,
         }),
-      }
+      },
     );
 
     return await response.json();
@@ -285,7 +286,7 @@ async function requestJWTFromVault(dataBase64: string) {
 async function encryptJWT(
   jwt: string,
   publicKeyBase64: string,
-  algorithm: string
+  algorithm: string,
 ) {
   try {
     await sodium.ready;
@@ -324,7 +325,7 @@ async function encryptJWT(
       jwtBytes,
       nonce,
       x25519PublicKey,
-      ephKeyPair.privateKey
+      ephKeyPair.privateKey,
     );
 
     console.log("✓ Encryption successful");
