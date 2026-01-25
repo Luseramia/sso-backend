@@ -135,7 +135,6 @@ export const ssoController = new Elysia().group("/sso", (app) =>
       "/approve-uuid",
       async (c) => {
         const { uuid } = c.body;
-        console.log("uuid", uuid);
 
         const data = await redis.get(`auth:pending:${uuid}`);
         if (!data) {
@@ -150,6 +149,8 @@ export const ssoController = new Elysia().group("/sso", (app) =>
         }
         const dataBase64 = Buffer.from(data).toString("base64");
         const jwt = (await requestJWTFromVault(dataBase64)) as any;
+        console.log('jwttttt',jwt);
+        
         console.log("dataBase64", dataBase64 + "." + jwt["data"]["signature"]);
 
         const encryptedToken = await encryptJWT(
