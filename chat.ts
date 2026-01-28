@@ -36,7 +36,7 @@ export const chatController = new Elysia().group("/chat", (app) =>
           } else {
             return {
               success: true,
-              data: { type: "message", status: "error at n8n" },
+              data: { type: "message", status: "error at n8n",result:result,url:productionApi },
             };
           }
         }
