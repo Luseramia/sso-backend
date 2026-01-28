@@ -3,11 +3,13 @@ import Elysia from "elysia";
 import { redis } from "./redis";
 import { ssoController } from "./login";
 import { ocrController } from "./ocr";
+import { chatController } from "./chat";
 import { tokenChecker } from "./authorize";
 import { cors } from "@elysiajs/cors";
 
 const app = new Elysia()
-  .use(ssoController)
+.use(ssoController)
+.use(chatController)
   .onBeforeHandle(async (c) => {
     if (!c.headers.authorization) {
       c.set.status = 401;
