@@ -3,7 +3,7 @@ import { redis } from "./redis";
 // import { S3Client, PutObjectCommand } from "@aws-sdk/client-s3";
 const productionApi =
   process.env.N8N_PRODUCTION_API ||
-  "http://192.168.1.53:5678/webhook/02bb3007-efbd-414c-8e6c-2cf2718ce984";
+  "https://n8n.tarchunk.win/webhook/upload-to-discord";
 export const chatController = new Elysia().group("/chat", (app) =>
   app
     .post(
