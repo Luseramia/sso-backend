@@ -10,7 +10,7 @@ export const chatController = new Elysia().group("/chat", (app) =>
       "/message",
       async ({ body, set }) => {
         const { message, file } = body;
-
+        
         if (!message && !file) {
           set.status = 400;
           return { error: "Message or file is required" };
