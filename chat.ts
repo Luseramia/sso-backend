@@ -9,8 +9,8 @@ export const chatController = new Elysia().group("/chat", (app) =>
     .post(
       "/message",
       async ({ body, set }) => {
-        const { message, file } = body;
-        
+        const { message, file, userId, userColor } = body;
+
         if (!message && !file) {
           set.status = 400;
           return { error: "Message or file is required" };
@@ -22,13 +22,20 @@ export const chatController = new Elysia().group("/chat", (app) =>
         // Handle text message
         if (message) {
           const messageData = {
-            type: "text",
-            content: message,
+            id: Date.now(),
+            type: "message",
+            text: message,
+            sender: "user",
+            userId,
+            userColor,
             timestamp,
           };
           const result = await onSaveMessage(message);
 
           if (result.message === "Workflow was started") {
+            // Broadcast to WS clients
+            app.server?.publish("chat", JSON.stringify(messageData));
+
             return {
               success: true,
               data: { type: "message", status: "stored" },
@@ -36,7 +43,7 @@ export const chatController = new Elysia().group("/chat", (app) =>
           } else {
             return {
               success: true,
-              data: { type: "message", status: "error at n8n",result:result,url:productionApi },
+              data: { type: "message", status: "error at n8n", result: result, url: productionApi },
             };
           }
         }
@@ -64,6 +71,15 @@ export const chatController = new Elysia().group("/chat", (app) =>
             return { success: false };
           }
 
+          // Broadcast success message to WebSocket clients
+          app.server?.publish("chat", JSON.stringify({
+            id: Date.now(),
+            type: "message",
+            text: `📁 อัปโหลดไฟล์สำเร็จ: ${file.name}`,
+            sender: "bot",
+            timestamp: new Date().toISOString()
+          }));
+
           return {
             success: true,
             data: { type: "file", status: "stored", },
@@ -74,12 +90,14 @@ export const chatController = new Elysia().group("/chat", (app) =>
         body: t.Object({
           message: t.Optional(t.String()),
           file: t.Optional(t.File()),
+          userId: t.Optional(t.String()),
+          userColor: t.Optional(t.String()),
         }),
       },
     )
 );
 
-async function onSaveMessage(message: string) {
+export async function onSaveMessage(message: string) {
   try {
     const res = await fetch(productionApi, {
       method: "POST",
@@ -89,7 +107,7 @@ async function onSaveMessage(message: string) {
       },
       body: JSON.stringify({
         message,
-        type:'text'
+        type: 'text'
       }),
     });
 
