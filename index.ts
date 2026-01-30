@@ -6,12 +6,12 @@ import { ocrController } from "./ocr";
 import { chatController } from "./chat";
 import { tokenChecker } from "./authorize";
 import { cors } from "@elysiajs/cors";
-import { websocketController } from "./websocket";
+// import { websocketController } from "./websocket";
 
 const app = new Elysia()
 .use(ssoController)
 .use(chatController)
-.use(websocketController)
+// .use(websocketController)
   .onBeforeHandle(async (c) => {
     if (!c.headers.authorization) {
       c.set.status = 401;
