@@ -2,6 +2,7 @@ import { Elysia } from "elysia";
 import { onSaveMessage } from "./chat";
 
 export const websocketController = new Elysia().ws("/ws/chat", {
+  idleTimeout: 255,
   open(ws) {
     console.log("client connected");
     ws.subscribe("chat");
@@ -13,6 +14,8 @@ export const websocketController = new Elysia().ws("/ws/chat", {
   async message(ws, message: any) {
     console.log("received message:", message);
     const payload = typeof message === "string" ? JSON.parse(message) : message;
+
+    if (payload.type === "ping") return;
 
     // 1. Broadcast the user's message to everyone (including the sender's other tabs)
     ws.publish("chat", JSON.stringify(payload));

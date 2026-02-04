@@ -103,7 +103,7 @@ export async function onSaveMessage(message: string) {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        "x-AUTH": "MTI5OTk0OTgxOTE0MTU1NDE5Nw",
+        "x-AUTH": "",
       },
       body: JSON.stringify({
         message,
