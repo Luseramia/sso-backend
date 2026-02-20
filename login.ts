@@ -8,6 +8,7 @@ import sodium from "libsodium-wrappers";
 const VAULT_TOKEN = await Bun.file("/vault/secrets/token").text() || '' ;
 // const VAULT_TOKEN = " ";
 import { Buffer } from "node:buffer";
+import { log2 } from "@noble/curves/abstract/fft.js";
 await sodium.ready;
 
 export const ssoController = new Elysia().group("/sso", (app) =>
@@ -131,6 +132,98 @@ export const ssoController = new Elysia().group("/sso", (app) =>
       },
     )
     .post(
+      "/poll-jwt/v2",
+      async (c) => {
+        const { uuid, signature } = c.body;
+        try {
+          const data = await redis.get(`auth:signed:${uuid}`);
+
+          if (!data) {
+            c.set.status = 404;
+            return { error: "Request expired" };
+          }
+
+          // console.log("ok", ok);
+
+          // // ตรวจสอบ challenge
+          // if (authData.challenge !== challenge) {
+          //   c.set.status = 400;
+          //   return { error: "Invalid challenge" };
+          // }
+
+          const authData = JSON.parse(data);
+
+          const sigBytes = base64ToBytes(signature);
+
+          const keyBytes = base64ToBytes(authData.publicKey);
+          const cryptoKey = await crypto.subtle.importKey(
+            "spki",
+            keyBytes,
+            {
+              name: "ECDSA",
+              namedCurve: "P-256",
+            },
+            true,
+            ["verify"],
+          );
+
+          const challengeBytes = base64ToBytes(authData.challenge);
+
+          // const payload = buildPayload(challengeBytes);
+
+          const ok = await crypto.subtle.verify(
+            { name: "ECDSA", hash: "SHA-256" },
+            cryptoKey,
+            sigBytes,
+            challengeBytes,
+          );
+          console.log("okkk", ok);
+          if (ok) {
+            if (authData.status === "approved" && authData.token) {
+              await redis.del(`auth:signed:${uuid}`);
+              return {
+                status: "approved",
+                token: authData.token,
+              };
+            }
+          } else if (authData.status === "rejected") {
+            await redis.del(`auth:signed:${uuid}`);
+            c.set.status = 200;
+            return { status: "rejected" };
+          } else {
+            // ยังรอ approval
+            const challenge = randomBytes(256).toString("base64");
+            authData.challenge = challenge
+            await redis.setex(
+              `auth:signed:${uuid}`,
+              60,
+              JSON.stringify(authData),
+            );
+            return { challenge: challenge };
+          }
+
+          // } else if (authData.status === "rejected") {
+          //   await redis.del(`auth:signed:${uuid}`);
+          //   c.set.status = 200;
+          //   return { status: "rejected" };
+          // } else {
+          //   // ยังรอ approval
+          //   return { status: authData.status };
+          // }
+        } catch (error) {
+          console.error("Polling error:", error);
+          c.set.status = 500;
+          return { error: "Polling failed" };
+        }
+      },
+      {
+        body: t.Object({
+          uuid: t.String(),
+          signature: t.String(),
+        }),
+      },
+    )
+    .post(
       "/approve-uuid",
       async (c) => {
         const { uuid } = c.body;
@@ -142,10 +235,10 @@ export const ssoController = new Elysia().group("/sso", (app) =>
         }
 
         const authData = JSON.parse(data);
-        if (authData.status !== "verified") {
-          c.set.status = 400;
-          return { error: "Device not verified" };
-        }
+        // if (authData.status !== "verified") {
+        //   c.set.status = 400;
+        //   return { error: "Device not verified" };
+        // }
         const dataBase64 = Buffer.from(data).toString("base64");
         //         jwttttt {
         //   errors: [ "permission denied" ],
@@ -163,6 +256,7 @@ export const ssoController = new Elysia().group("/sso", (app) =>
 
         authData.status = "approved";
         authData.encryptedToken = encryptedToken;
+        authData.token = dataBase64 + "." + jwt["data"]["signature"];
         authData.approvedAt = new Date().toISOString();
         await redis.del(`auth:pending:${uuid}`);
         await redis.setex(`auth:signed:${uuid}`, 60, JSON.stringify(authData));
@@ -249,6 +343,13 @@ function verifySignature(
       });
 
       return verify(null, messageBuffer, publicKey, signatureBuffer);
+    } else if (algorithm == "ECDSA") {
+      const publicKey = createPublicKey({
+        key: Buffer.from(publicKeyRaw),
+        format: "der",
+        type: "spki",
+      });
+      return verify(null, messageBuffer, publicKey, signatureBuffer);
     }
     return false;
   } catch (error) {
@@ -259,7 +360,6 @@ function verifySignature(
 
 async function requestJWTFromVault(dataBase64: string) {
   try {
-    
     const response = await fetch(
       "http://192.168.1.102:8200/v1/sso/sign/login/sha3-512",
       {
@@ -339,4 +439,15 @@ async function encryptJWT(
     console.error("Encryption error:", error);
     throw error;
   }
+}
+function base64ToBytes(b64: string) {
+  return new Uint8Array(Buffer.from(b64, "base64"));
+}
+
+function buildPayload(challengeBytes: Uint8Array<ArrayBuffer>) {
+  const payload = new Uint8Array(challengeBytes);
+
+  // payload.set(challengeBytes, 0);
+
+  return payload;
 }

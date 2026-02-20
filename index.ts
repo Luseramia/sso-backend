@@ -9,9 +9,15 @@ import { cors } from "@elysiajs/cors";
 import { websocketController } from "./websocket";
 
 const app = new Elysia()
-.use(ssoController)
-.use(chatController)
-.use(websocketController)
+  .use(
+    cors({
+      origin: "*",
+      // origin: "http://localhost:5173",
+    }),
+  )
+  .use(ssoController)
+  .use(chatController)
+  .use(websocketController)
   .onBeforeHandle(async (c) => {
     if (!c.headers.authorization) {
       c.set.status = 401;
@@ -24,10 +30,5 @@ const app = new Elysia()
   })
   .use(ocrController)
   // .use(AuthorizationController)
-  .use(
-    cors({
-      origin: "*",
-      // origin: "http://localhost:5173",
-    })
-  )
+
   .listen(3000);
