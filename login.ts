@@ -248,14 +248,14 @@ export const ssoController = new Elysia().group("/sso", (app) =>
 
         console.log("dataBase64", dataBase64 + "." + jwt["data"]["signature"]);
 
-        const encryptedToken = await encryptJWT(
-          dataBase64 + "." + jwt["data"]["signature"],
-          authData.publicKey,
-          authData.algorithm,
-        );
+        // const encryptedToken = await encryptJWT(
+        //   dataBase64 + "." + jwt["data"]["signature"],
+        //   authData.publicKey,
+        //   authData.algorithm,
+        // );
 
         authData.status = "approved";
-        authData.encryptedToken = encryptedToken;
+        // authData.encryptedToken = encryptedToken;
         authData.token = dataBase64 + "." + jwt["data"]["signature"];
         authData.approvedAt = new Date().toISOString();
         await redis.del(`auth:pending:${uuid}`);
