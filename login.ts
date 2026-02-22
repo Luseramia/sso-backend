@@ -16,7 +16,6 @@ export const ssoController = new Elysia().group("/sso", (app) =>
     .post(
       "/register-uuid",
       async (c) => {
-        console.log(c.body);
         const { uuid, algorithm, publicKey } = c.body;
         // const publicKeyDer = Buffer.from(c.body.publicKey, "base64");
         const challenge = randomBytes(256).toString("base64");
@@ -139,8 +138,24 @@ export const ssoController = new Elysia().group("/sso", (app) =>
           const data = await redis.get(`auth:signed:${uuid}`);
 
           if (!data) {
-            c.set.status = 404;
-            return { error: "Request expired" };
+            const pendingData = await redis.get(`auth:pending:${uuid}`);
+            if (pendingData) {
+              const challenge = randomBytes(256).toString("base64");
+              const pendingDataJson = JSON.parse(pendingData);
+              // const ttl = await redis.ttl(pendingData);
+              // if(ttl>0)
+              pendingDataJson.challenge = challenge;
+              await redis.set(
+                `auth:pending:${uuid}`,
+                JSON.stringify(pendingDataJson),
+                "KEEPTTL",
+              );
+              c.set.status = 200;
+              return { challenge: challenge };
+            } else {
+              c.set.status = 404;
+              return { error: "Request expired" };
+            }
           }
 
           // console.log("ok", ok);
@@ -166,6 +181,7 @@ export const ssoController = new Elysia().group("/sso", (app) =>
             true,
             ["verify"],
           );
+          
 
           const challengeBytes = base64ToBytes(authData.challenge);
 
@@ -177,7 +193,6 @@ export const ssoController = new Elysia().group("/sso", (app) =>
             sigBytes,
             challengeBytes,
           );
-          console.log("okkk", ok);
           if (ok) {
             if (authData.status === "approved" && authData.token) {
               await redis.del(`auth:signed:${uuid}`);
@@ -193,12 +208,13 @@ export const ssoController = new Elysia().group("/sso", (app) =>
           } else {
             // ยังรอ approval
             const challenge = randomBytes(256).toString("base64");
-            authData.challenge = challenge
-            await redis.setex(
+            authData.challenge = challenge;
+            await redis.set(
               `auth:signed:${uuid}`,
-              60,
               JSON.stringify(authData),
+              "KEEPTTL",
             );
+            c.set.status = 200;
             return { challenge: challenge };
           }
 
@@ -244,9 +260,7 @@ export const ssoController = new Elysia().group("/sso", (app) =>
         //   errors: [ "permission denied" ],
         // }
         const jwt = (await requestJWTFromVault(dataBase64)) as any;
-        console.log("jwttttt", jwt);
 
-        console.log("dataBase64", dataBase64 + "." + jwt["data"]["signature"]);
 
         // const encryptedToken = await encryptJWT(
         //   dataBase64 + "." + jwt["data"]["signature"],
@@ -280,10 +294,10 @@ export const ssoController = new Elysia().group("/sso", (app) =>
         }
 
         const authData = JSON.parse(data);
-        if (authData.status !== "verified") {
-          c.set.status = 400;
-          return { error: "Device not verified" };
-        }
+        // if (authData.status !== "verified") {
+        //   c.set.status = 400;
+        //   return { error: "Device not verified" };
+        // }
 
         authData.status = "rejected";
         authData.rejectedAt = new Date().toISOString();
