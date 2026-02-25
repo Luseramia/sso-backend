@@ -8,7 +8,6 @@ import sodium from "libsodium-wrappers";
 const VAULT_TOKEN = await Bun.file("/vault/secrets/token").text() || '' ;
 // const VAULT_TOKEN = " ";
 import { Buffer } from "node:buffer";
-import { log2 } from "@noble/curves/abstract/fft.js";
 await sodium.ready;
 
 export const ssoController = new Elysia().group("/sso", (app) =>
