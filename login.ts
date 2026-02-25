@@ -5,8 +5,8 @@ const { randomBytes, createPublicKey, verify, createCipheriv } =
 import sodium from "libsodium-wrappers";
 
 // import sodium from "libsodium-wrappers-sumo";
-const VAULT_TOKEN = await Bun.file("/vault/secrets/token").text() || '' ;
-// const VAULT_TOKEN = " ";
+// const VAULT_TOKEN = await Bun.file("/vault/secrets/token").text() || '' ;
+const VAULT_TOKEN = " ";
 import { Buffer } from "node:buffer";
 import { log2 } from "@noble/curves/abstract/fft.js";
 await sodium.ready;
