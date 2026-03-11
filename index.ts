@@ -13,24 +13,40 @@ const app = new Elysia()
   .use(
     cors({
       origin: "*",
-      // origin: "http://localhost:5173",
     }),
   )
   .onBeforeHandle(rateLimiter)
   .use(ssoController)
   // .use(chatController)
   // .use(websocketController)
-  .onBeforeHandle(async (c) => {
-    if (!c.headers.authorization) {
-      c.set.status = 401;
-      return { error: "unauthorize" };
+  // .onBeforeHandle(async (c) => {
+  //   if (!c.headers.authorization) {
+  //     c.set.status = 401;
+  //     return { error: "unauthorize" };
+  //   }
+  //   if (!(await tokenChecker(c.headers.authorization))) {
+  //     c.set.status = 403;
+  //     return { error: "Forbiden" };
+  //   }
+  // })
+  .guard({
+    async beforeHandle(c) {
+      if (!c.headers.authorization) {
+        c.set.status = 401;
+        return { error: "unauthorize" };
+      }
+      if (!(await tokenChecker(c.headers.authorization))) {
+        c.set.status = 403;
+        return { error: "Forbiden" };
+      }
     }
-    if (!(await tokenChecker(c.headers.authorization))) {
-      c.set.status = 403;
-      return { error: "Forbiden" };
-    }
-  })
-  .use(ocrController)
+  }, (app) =>
+    // ทุก Controller ในนี้จะโดนเช็ค Token อัตโนมัติ
+    app.use(ocrController)
+    // .use(chatController)
+  )
+
+  // .use(ocrController)
 
   // .use(AuthorizationController)
 
