@@ -5,17 +5,20 @@ const { randomBytes, createPublicKey, verify, createCipheriv } =
 import sodium from "libsodium-wrappers";
 
 // import sodium from "libsodium-wrappers-sumo";
-const VAULT_TOKEN = await Bun.file("/vault/secrets/token").text() || '' ;
-// const VAULT_TOKEN = " ";
+const VAULT_TOKEN =
+  process.env.VAULT_TOKEN || (await Bun.file("/vault/secrets/token").text());
 import { Buffer } from "node:buffer";
+import LoginService from "./services/login/login";
 await sodium.ready;
+
+const loginService = new LoginService();
 
 export const ssoController = new Elysia().group("/sso", (app) =>
   app
     .post(
       "/register-uuid",
       async (c) => {
-        const { uuid, algorithm, publicKey } = c.body;
+        const { uuid, name, algorithm, publicKey } = c.body;
         // const publicKeyDer = Buffer.from(c.body.publicKey, "base64");
         const challenge = randomBytes(256).toString("base64");
 
@@ -23,6 +26,7 @@ export const ssoController = new Elysia().group("/sso", (app) =>
           `auth:pending:${uuid}`,
           JSON.stringify({
             uuid,
+            name,
             publicKey,
             challenge,
             algorithm,
@@ -40,6 +44,7 @@ export const ssoController = new Elysia().group("/sso", (app) =>
           uuid: t.String(),
           publicKey: t.String(),
           algorithm: t.String(),
+          name: t.String(),
         }),
       },
     )
@@ -180,7 +185,6 @@ export const ssoController = new Elysia().group("/sso", (app) =>
             true,
             ["verify"],
           );
-          
 
           const challengeBytes = base64ToBytes(authData.challenge);
 
@@ -254,12 +258,23 @@ export const ssoController = new Elysia().group("/sso", (app) =>
         //   c.set.status = 400;
         //   return { error: "Device not verified" };
         // }
-        const dataBase64 = Buffer.from(data).toString("base64");
+
+        const userData = await loginService.login(authData.name);
+        const {
+          publicKey,
+          challenge,
+          algorithm,
+          status,
+          requestedAt,
+          ...rest
+        } = authData;
+        const dataBase64 = Buffer.from(
+          JSON.stringify({ id: userData?.id, ...rest }),
+        ).toString("base64");
         //         jwttttt {
         //   errors: [ "permission denied" ],
         // }
         const jwt = (await requestJWTFromVault(dataBase64)) as any;
-
 
         // const encryptedToken = await encryptJWT(
         //   dataBase64 + "." + jwt["data"]["signature"],
@@ -312,7 +327,7 @@ export const ssoController = new Elysia().group("/sso", (app) =>
       },
     )
     .get("/pending-uuids", async (c) => {
-      const keys = await redis.keys("*");
+      const keys = await redis.keys("auth:pending:*");
 
       const result = await Promise.all(
         keys.map(async (key) => {
