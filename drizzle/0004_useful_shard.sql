@@ -1,0 +1,1 @@
+ALTER TABLE "file_upload" DROP COLUMN "alwaysNull";
