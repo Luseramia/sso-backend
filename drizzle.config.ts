@@ -4,7 +4,7 @@ import { defineConfig } from "drizzle-kit";
 export default defineConfig({
   out: "./drizzle",
   // schema:"./db/index.ts",
-  schema: ["./db/users.schema.ts", "./db/file-upload.schema.ts"],
+  schema: "./db/*.schema.ts",
   dialect: "postgresql",
   dbCredentials: {
     url: "192.168.1.44",
