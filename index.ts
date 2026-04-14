@@ -25,7 +25,6 @@ const app = new Elysia()
       origin: "*",
     }),
   )
-  .use(ocrController)
   .onBeforeHandle(rateLimiter)
   .use(ssoController)
   .guard(
@@ -47,7 +46,7 @@ const app = new Elysia()
     },
     (app) =>
       // ทุก Controller ในนี้จะโดนเช็ค Token อัตโนมัติ
-      app.use(fileManagerController),
+      app.use(ocrController).use(fileManagerController),
     // .use(chatController)
   )
 
