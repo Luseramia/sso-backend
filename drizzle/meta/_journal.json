@@ -64,6 +64,13 @@
       "when": 1776082725654,
       "tag": "0008_wild_sentinel",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1776235291315,
+      "tag": "0009_omniscient_starbolt",
+      "breakpoints": true
     }
   ]
 }

@@ -20,12 +20,13 @@ export default class BankTransactionService {
   }
 
   async getByDateRange(params: {
+    userId: number;
     year: number;
     month?: number;
     day?: number;
   }) {
     try {
-      const { year, month, day } = params;
+      const { year, month, day,userId } = params;
 
       let startDate: Date;
       let endDate: Date;
@@ -50,8 +51,9 @@ export default class BankTransactionService {
         .where(
           and(
             gte(bankTransactionsTable.datetime, startDate),
-            lt(bankTransactionsTable.datetime, endDate)
-          )
+            lt(bankTransactionsTable.datetime, endDate),
+            eq(bankTransactionsTable.create_by_user_id, userId),
+          ),
         )
         .orderBy(bankTransactionsTable.datetime);
 

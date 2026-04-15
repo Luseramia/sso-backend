@@ -1,4 +1,11 @@
-import { integer, numeric, pgTable, text, timestamp, varchar } from "drizzle-orm/pg-core";
+import {
+  integer,
+  numeric,
+  pgTable,
+  text,
+  timestamp,
+  varchar,
+} from "drizzle-orm/pg-core";
 import { helper } from "./helper.schema";
 
 export const bankTransactionsTable = pgTable("bank_transactions", {
@@ -10,5 +17,6 @@ export const bankTransactionsTable = pgTable("bank_transactions", {
   balance: numeric({ precision: 15, scale: 2 }).notNull(),
   channel: varchar({ length: 50 }).notNull(),
   details: text(),
+  create_by_user_id: integer(),
   ...helper,
 });
