@@ -9,6 +9,8 @@ export default class LoginService {
         .select()
         .from(usersTable)
         .where(eq(usersTable.name, name));
+      console.log('is Exist',isExist);
+      
       if(isExist){
         return isExist[0];
       }
