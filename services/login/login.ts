@@ -9,9 +9,7 @@ export default class LoginService {
         .select()
         .from(usersTable)
         .where(eq(usersTable.name, name));
-      console.log('is Exist',isExist);
-      
-      if(isExist){
+      if (isExist.length > 0) {
         return isExist[0];
       }
       const user = await dz
