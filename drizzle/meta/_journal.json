@@ -71,6 +71,20 @@
       "when": 1776235291315,
       "tag": "0009_omniscient_starbolt",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1776353681963,
+      "tag": "0010_heavy_sabretooth",
+      "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1776354699139,
+      "tag": "0011_large_echo",
+      "breakpoints": true
     }
   ]
 }

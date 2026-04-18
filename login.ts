@@ -37,7 +37,7 @@ export const ssoController = new Elysia().group("/sso", (app) =>
           60,
         );
 
-        return { challenge };
+        return { challenge,uuid };
       },
       {
         body: t.Object({

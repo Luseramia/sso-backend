@@ -1,4 +1,4 @@
-import { integer, pgTable, varchar } from "drizzle-orm/pg-core";
+import { boolean, integer, pgTable, varchar } from "drizzle-orm/pg-core";
 import { helper } from "./helper.schema";
 
 export const fileUploadTable = pgTable("file_upload", {
@@ -6,6 +6,8 @@ export const fileUploadTable = pgTable("file_upload", {
   file_name: varchar({ length: 200 }).notNull(),
   create_by_user_id: integer(),
   original_file_name: varchar({ length: 200 }).notNull(),
+  file_category: varchar({ length: 50 }).default("video").notNull(),
+  is_public: boolean().default(false).notNull(),
   ...helper,
 });
 
