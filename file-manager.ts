@@ -83,6 +83,43 @@ export const fileManagerController = new Elysia().group("/file", (app) =>
         body: t.String(),
       },
     )
+    .post(
+      "/vdo/presign",
+      async ({ body, headers, set }) => {
+        const token = headers.authorization?.split(" ")[1]?.split(".")[0];
+        let userId: number | null = null;
+        if (token) {
+          const userData = Buffer.from(token, "base64").toString("utf-8");
+          userId = JSON.parse(userData).id;
+        }
+
+        const jsonData = JSON.parse(body);
+        const { id } = jsonData;
+        const file = await uploadFileService.getOne(id);
+        if (!file) return true;
+
+        // private file — only the owner can download
+        if (!file.is_public && file.create_by_user_id !== userId) {
+          set.status = 403;
+          return { error: "ไม่มีสิทธิ์เข้าถึงไฟล์นี้" };
+        }
+
+        const category = file.file_category || "video";
+        const url = s3.presign(`uploads/${category}/${file.file_name}`, {
+          method: "GET",
+          expiresIn: 3600,
+          bucket: "school",
+        });
+        return {
+          url,
+          file_name: file.file_name,
+          original_file_name: file.original_file_name,
+        };
+      },
+      {
+        body: t.String(),
+      },
+    )
     .get(
       "/all/thumnail",
       async () => {
