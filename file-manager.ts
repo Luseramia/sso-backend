@@ -30,6 +30,7 @@ export const fileManagerController = new Elysia().group("/file", (app) =>
           }
 
           const url = s3.presign(`uploads/${category}/${uuid}`, {
+            endpoint: process.env.S3_PUBLIC_ENDPOINT,
             method: "PUT",
             expiresIn: 300,
             bucket: "school",
@@ -73,6 +74,7 @@ export const fileManagerController = new Elysia().group("/file", (app) =>
 
         const category = file.file_category || "video";
         const url = s3.presign(`uploads/${category}/${file.file_name}`, {
+          endpoint: process.env.S3_PUBLIC_ENDPOINT,
           method: "GET",
           expiresIn: 3600,
           bucket: "school",
@@ -106,6 +108,7 @@ export const fileManagerController = new Elysia().group("/file", (app) =>
 
         const category = file.file_category || "video";
         const url = s3.presign(`uploads/${category}/${file.file_name}`, {
+          endpoint: process.env.S3_PUBLIC_ENDPOINT,
           method: "GET",
           expiresIn: 3600,
           bucket: "school",
