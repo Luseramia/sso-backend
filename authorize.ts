@@ -33,7 +33,6 @@ export const tokenChecker = async (bearerToken: string): Promise<boolean> => {
     throw new Error("Failed to get JWT from Vault");
   }
 };
-
 export interface vaultValidateResponse {
   request_id: string;
   lease_id: string;
