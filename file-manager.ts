@@ -44,6 +44,7 @@ export const fileManagerController = new Elysia().group("/file", (app) =>
             file_category: category,
           });
 
+
           return { url };
         }
       },

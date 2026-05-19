@@ -10,6 +10,7 @@ import { websocketController } from "./websocket";
 import { rateLimiter } from "./rate-limit";
 import pool from "./pg-connector";
 import { fileManagerController } from "./file-manager";
+import { cryptoAnalysisController } from "./crypto-analysis";
 
 // pool
 const app = new Elysia()
@@ -46,7 +47,10 @@ const app = new Elysia()
     },
     (app) =>
       // ทุก Controller ในนี้จะโดนเช็ค Token อัตโนมัติ
-      app.use(ocrController).use(fileManagerController),
+      app
+        .use(ocrController)
+        .use(fileManagerController)
+        .use(cryptoAnalysisController),
     // .use(chatController)
   )
 
