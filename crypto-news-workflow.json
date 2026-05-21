@@ -1,0 +1,365 @@
+{
+  "name": "crypto-news(improved)",
+  "nodes": [
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 1
+          },
+          "conditions": [
+            {
+              "id": "filter-score",
+              "leftValue": "={{ $json.source_attribution_score }}",
+              "rightValue": 3,
+              "operator": {
+                "type": "number",
+                "operation": "gte"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "d75a96ed-0eeb-4ccf-9e06-1456322bcbc9",
+      "name": "Filter: Score ≥ 3",
+      "type": "n8n-nodes-base.filter",
+      "typeVersion": 2,
+      "position": [4640, 2208]
+    },
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            { "field": "hours" }
+          ]
+        }
+      },
+      "id": "dc43b508-21c1-48eb-83dd-a3603d2f3ba5",
+      "name": "Schedule Trigger1",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [3040, 2208]
+    },
+    {
+      "parameters": {
+        "url": "https://www.coindesk.com/arc/outboundfeeds/rss/",
+        "options": {}
+      },
+      "id": "ea2135c7-415a-48d5-b54f-96e09066b971",
+      "name": "RSS - CoinDesk1",
+      "type": "n8n-nodes-base.rssFeedRead",
+      "typeVersion": 1,
+      "position": [3248, 2064]
+    },
+    {
+      "parameters": {
+        "url": "https://cointelegraph.com/rss",
+        "options": {}
+      },
+      "id": "4aa0cd64-e09a-4ab0-b6d0-bd905e79c3e8",
+      "name": "RSS - CoinTelegraph1",
+      "type": "n8n-nodes-base.rssFeedRead",
+      "typeVersion": 1,
+      "position": [3248, 2208]
+    },
+    {
+      "parameters": {
+        "url": "https://decrypt.co/feed",
+        "options": {}
+      },
+      "id": "aabdf895-80ab-47d7-939c-b8c1717a0b7a",
+      "name": "RSS - Decrypt1",
+      "type": "n8n-nodes-base.rssFeedRead",
+      "typeVersion": 1,
+      "position": [3248, 2352]
+    },
+    {
+      "parameters": {
+        "numberInputs": 3
+      },
+      "id": "701040b3-ee25-4824-b4a6-67626a523a82",
+      "name": "Merge All Feeds1",
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3,
+      "position": [3488, 2208]
+    },
+    {
+      "parameters": {
+        "jsCode": "// ===== Parse + Dedupe + Pre-check + Rank Top-N =====\nconst items = $input.all();\nconst seen = new Set();\nconst candidates = [];\nconst stats = {\n  total: items.length,\n  deduped: 0,\n  tooOld: 0,\n  noTitle: 0,\n  belowMinScore: 0,\n  kept: 0,\n  droppedBelowTopN: 0,\n};\n\n// ⚙️ ปรับได้\nconst MAX_AGE_HOURS = 48;\nconst MIN_PRE_SCORE = 2;   // ต้องมีอย่างน้อย 1 signal ชัดเจน\nconst TOP_N = 5;            // ส่งเข้า Ollama เฉพาะ Top N ข่าวสำคัญสุดต่อรอบ\n\nfor (const item of items) {\n  const title   = item.json.title   || '';\n  const link    = item.json.link    || item.json.url || '';\n  const content = item.json.contentSnippet || item.json.content || item.json.summary || item.json.description || '';\n  const pubDate = item.json.pubDate || item.json.isoDate || new Date().toISOString();\n  const source  = item.json.feedUrl || link.split('/').slice(0,3).join('/');\n\n  if (!title) { stats.noTitle++; continue; }\n\n  const key = title.toLowerCase().trim();\n  if (seen.has(key)) { stats.deduped++; continue; }\n  seen.add(key);\n\n  const ageHours = (Date.now() - new Date(pubDate).getTime()) / 36e5;\n  if (ageHours > MAX_AGE_HOURS) { stats.tooOld++; continue; }\n\n  // รวม title + content เพื่อตรวจ signal (เพราะ title มัก carry impact keyword)\n  const text = `${title}\\n${content}`;\n\n  const signals = {\n    has_named_source  : /said|according to|told reporters|confirmed by|spokesperson/i.test(text),\n    has_url_link      : /https?:\\/\\//i.test(content),\n    has_onchain_ref   : /etherscan|dune analytics|blockchair|token terminal|glassnode/i.test(text),\n    has_anonymous_src : /sources say|reportedly|rumored|unconfirmed|insiders say/i.test(text),\n    has_official_doc  : /filing|sec|cftc|statement|press release|announcement|whitepaper/i.test(text),\n    has_named_person  : /CEO|CTO|CFO|founder|chairman|minister|senator/i.test(text),\n    // ⭐ impact keyword: เหตุการณ์ที่มีผลกระทบต่อตลาด\n    has_impact_keyword: /SEC|ETF|hack|exploit|lawsuit|launch|halving|partnership|listed|delisted|approved|rejected|Fed|FOMC|regulation|\\bban\\b|bankruptcy|merger|acquisition/i.test(text),\n    // ⭐ major coin mention เพิ่ม weight\n    mentions_major_coin: /\\b(BTC|Bitcoin|ETH|Ethereum|SOL|Solana|BNB|XRP|Ripple|ADA|Cardano|DOGE)\\b/i.test(text)\n  };\n\n  const positive_signals = [\n    signals.has_named_source,\n    signals.has_url_link,\n    signals.has_onchain_ref,\n    signals.has_official_doc,\n    signals.has_named_person\n  ].filter(Boolean).length;\n\n  const impact_bonus    = signals.has_impact_keyword ? 2 : 0;\n  const major_coin_bonus= signals.mentions_major_coin ? 1 : 0;\n  const anonymous_penalty = signals.has_anonymous_src ? 1 : 0;\n\n  const pre_score = Math.max(\n    0,\n    Math.min(10, positive_signals * 2 + impact_bonus + major_coin_bonus - anonymous_penalty)\n  );\n\n  if (pre_score < MIN_PRE_SCORE) { stats.belowMinScore++; continue; }\n\n  candidates.push({\n    title,\n    link,\n    content: content.slice(0, 2000),\n    pubDate,\n    source,\n    attribution_signals: signals,\n    pre_score\n  });\n}\n\n// 🏆 เรียง pre_score มาก → น้อย และหยิบเฉพาะ Top N\ncandidates.sort((a, b) => b.pre_score - a.pre_score);\nconst selected = candidates.slice(0, TOP_N);\nstats.kept = selected.length;\nstats.droppedBelowTopN = Math.max(0, candidates.length - selected.length);\n\nconsole.log('📊 Parse stats:', JSON.stringify(stats));\n\nreturn selected.map(c => ({ json: { ...c, _stats: stats } }));\n"
+      },
+      "id": "a69dd281-86d1-470b-a9f1-0761abbe852c",
+      "name": "Parse, Dedupe & Pre-check Attribution1",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [3696, 2208]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "const item = $input.item.json;\n\nconst signalSummary = Object.entries(item.attribution_signals)\n  .map(([k, v]) => `- ${k}: ${v}`)\n  .join('\\n');\n\nconst prompt = `คุณเป็นนักวิเคราะห์ข่าว crypto ที่เชี่ยวชาญ ประเมินข่าวต่อไปนี้และตอบกลับเป็น JSON เท่านั้น ห้ามมีข้อความอื่นนอกจาก JSON ห้ามใช้ markdown code fence\n\nชื่อข่าว: ${item.title}\nแหล่งที่มา: ${item.source}\nเนื้อหา: ${item.content}\n\nผล pre-check (regex):\n${signalSummary}\npre_score: ${item.pre_score}/10\n\n⚠️ สำคัญ: เนื้อหาที่ได้คือ RSS snippet (สรุปสั้น) ไม่ใช่บทความเต็ม\n- อย่าลงโทษคะแนน attribution หนักเกินไปเพราะเนื้อหาสั้น\n- ประเมินจากชื่อข่าว + แหล่งที่มาที่น่าเชื่อถือ (CoinDesk, CoinTelegraph, Decrypt เป็น tier-1 sources) + signals ที่ตรวจพบ\n- แหล่งข่าวระดับ tier-1 ให้คะแนน baseline 6/10 ขึ้นไป\n- credibility \"Low\" สงวนไว้สำหรับข่าวที่มี red flag ชัดเจน หรือเป็น rumor/unconfirmed เท่านั้น\n\nตอบ JSON รูปแบบนี้เท่านั้น:\n{\n  \"summary_th\": \"สรุปข่าวภาษาไทย 2-3 ประโยค\",\n  \"sentiment\": \"Bullish | Bearish | Neutral\",\n  \"sentiment_reason\": \"เหตุผลสั้นๆ\",\n  \"coins_mentioned\": [\"BTC\"],\n  \"source_attribution_score\": 7,\n  \"source_attribution_notes\": \"หมายเหตุ\",\n  \"red_flags\": [],\n  \"credibility\": \"High\",\n  \"recommended_action\": \"ควรติดตามต่อหรือไม่\"\n}`;\n\nreturn { json: { ...item, ollama_prompt: prompt } };\n"
+      },
+      "id": "7eacfdea-c8b0-4bc8-8f80-b1ebcf6ace85",
+      "name": "Build Ollama Prompt1",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [3920, 2208]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://192.168.1.33:11434/api/generate",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            { "name": "Content-Type", "value": "application/json" }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            { "name": "model", "value": "qwen2.5:7b" },
+            { "name": "prompt", "value": "={{ $json.ollama_prompt }}" },
+            { "name": "stream", "value": false },
+            { "name": "format", "value": "json" },
+            { "name": "options", "value": "={{ { \"temperature\": 0.2, \"num_predict\": 1200 } }}" }
+          ]
+        },
+        "options": {
+          "response": {
+            "response": { "neverError": true }
+          },
+          "timeout": 120000
+        }
+      },
+      "id": "d17fc3ce-56c4-4b78-b639-cc7aeb64e317",
+      "name": "Send to Ollama1",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [4192, 2208]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "// $input.item.json = Ollama response (replaces input)\n// → ดึงข้อมูลข่าวเดิมจาก node ก่อนหน้าผ่าน $('Build Ollama Prompt1').item.json\nconst ollama = $input.item.json;\nconst original = $('Build Ollama Prompt1').item.json;\n\nlet analysis = {};\nlet parseOk = false;\n\ntry {\n  let raw = ollama.response || '';\n  raw = raw.replace(/```json/gi, '').replace(/```/g, '').trim();\n\n  const match = raw.match(/\\{[\\s\\S]*\\}/);\n  if (!match) throw new Error('No JSON found in response');\n\n  analysis = JSON.parse(match[0]);\n  parseOk = true;\n\n  let score = Number(analysis.source_attribution_score);\n  if (!Number.isFinite(score)) score = 5;\n  analysis.source_attribution_score = Math.max(0, Math.min(10, score));\n\n  const cred = String(analysis.credibility || '').trim();\n  if (!['High', 'Medium', 'Low'].includes(cred)) analysis.credibility = 'Medium';\n\n  const sent = String(analysis.sentiment || '').trim();\n  if (!['Bullish', 'Bearish', 'Neutral'].includes(sent)) analysis.sentiment = 'Neutral';\n\n  if (!Array.isArray(analysis.coins_mentioned)) analysis.coins_mentioned = [];\n  if (!Array.isArray(analysis.red_flags)) analysis.red_flags = [];\n} catch (e) {\n  console.log('⚠️ Parse error for:', original.title, '-', e.message);\n  analysis = {\n    summary_th              : original.title + ' (ไม่สามารถวิเคราะห์เนื้อหาได้ - ใช้ข้อมูลเดิม)',\n    sentiment               : 'Neutral',\n    sentiment_reason        : 'AI ตอบกลับไม่ถูก format',\n    coins_mentioned         : [],\n    source_attribution_score: 5,\n    source_attribution_notes: 'Parse error: ' + e.message,\n    red_flags               : ['ai_parse_error'],\n    credibility             : 'Medium',\n    recommended_action      : 'AI ตอบกลับ JSON ไม่ถูกต้อง ควรตรวจสอบเนื้อหาด้วยตนเอง'\n  };\n}\n\nreturn {\n  json: {\n    title       : original.title,\n    link        : original.link,\n    source      : original.source,\n    pubDate     : original.pubDate,\n    pre_score   : original.pre_score,\n    parse_ok    : parseOk,\n    ...analysis,\n    analyzed_at : new Date().toISOString()\n  }\n};\n"
+      },
+      "id": "45d2b2dd-45c9-43a0-a7cc-0884f9716ea4",
+      "name": "Parse Ollama Response1",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [4416, 2208]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "const d = $input.item.json;\n\nconst sentimentEmoji = { 'Bullish':'🟢','Bearish':'🔴','Neutral':'🟡' }[d.sentiment] || '⚪';\nconst credibilityEmoji = { 'High':'✅','Medium':'⚠️','Low':'❌' }[d.credibility] || '❓';\nconst coinsText = d.coins_mentioned && d.coins_mentioned.length > 0 ? d.coins_mentioned.join(', ') : 'N/A';\nconst parseWarning = d.parse_ok === false ? '\\n⚠️ _AI response parse error - ข้อมูลอาจไม่ครบ_' : '';\n\nconst message = [\n  `📝 ${d.summary_th}`,\n  ``,\n  `💰 Coins: ${coinsText}`,\n  ``,\n  `${credibilityEmoji} Credibility: **${d.credibility}**`,\n  ``,\n].join('\\n');\n\nconst finalMessage = message.length > 1900 ? message.slice(0, 1897) + '...' : message;\n\nreturn { json: { ...d, telegram_message: finalMessage } };\n"
+      },
+      "id": "96ce30da-26ad-4733-86f2-6d085b9a2e91",
+      "name": "Format Output Message1",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [4864, 2208]
+    },
+    {
+      "parameters": {
+        "resource": "message",
+        "guildId": {
+          "__rl": true,
+          "value": "1285649599691755673",
+          "mode": "list",
+          "cachedResultName": "delsgade",
+          "cachedResultUrl": "https://discord.com/channels/1285649599691755673"
+        },
+        "channelId": {
+          "__rl": true,
+          "value": "1505597858638991400",
+          "mode": "list",
+          "cachedResultName": "news",
+          "cachedResultUrl": "https://discord.com/channels/1285649599691755673/1505597858638991400"
+        },
+        "content": "={{ $json.telegram_message }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.discord",
+      "typeVersion": 2,
+      "position": [5088, 2096],
+      "id": "3d0e3f99-9e29-4b91-8bb3-34918f018cad",
+      "name": "Send a message1",
+      "webhookId": "a3618956-5db0-4943-86ce-dfb4ee4b874a",
+      "credentials": {
+        "discordBotApi": {
+          "id": "HmMkg4nEY7ZcpYTe",
+          "name": "Discord Bot account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "schema": {
+          "__rl": true,
+          "mode": "list",
+          "value": "public"
+        },
+        "table": {
+          "__rl": true,
+          "value": "crypto_news",
+          "mode": "list",
+          "cachedResultName": "crypto_news"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "title": "={{ $json.title }}",
+            "link": "={{ $json.link }}",
+            "source": "={{ $json.source }}",
+            "pub_date": "={{ $json.pubDate }}",
+            "summary_th": "={{ $json.summary_th }}",
+            "sentiment": "={{ $json.sentiment }}",
+            "sentiment_reason": "={{ $json.sentiment_reason }}",
+            "coins_mentioned": "={{ $json.coins_mentioned || [] }}",
+            "pre_score": "={{ $json.pre_score }}",
+            "source_attribution_score": "={{ $json.source_attribution_score }}",
+            "source_attribution_notes": "={{ $json.source_attribution_notes }}",
+            "red_flags": "={{ $json.red_flags || [] }}",
+            "credibility": "={{ $json.credibility }}",
+            "recommended_action": "={{ $json.recommended_action }}",
+            "parse_ok": "={{ $json.parse_ok }}",
+            "analyzed_at": "={{ $json.analyzed_at }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            { "id": "id", "displayName": "id", "required": false, "defaultMatch": true, "display": true, "type": "number", "canBeUsedToMatch": true, "removed": true },
+            { "id": "title", "displayName": "title", "required": true, "defaultMatch": false, "display": true, "type": "string", "canBeUsedToMatch": true },
+            { "id": "link", "displayName": "link", "required": true, "defaultMatch": false, "display": true, "type": "string", "canBeUsedToMatch": true },
+            { "id": "source", "displayName": "source", "required": false, "defaultMatch": false, "display": true, "type": "string", "canBeUsedToMatch": true },
+            { "id": "pub_date", "displayName": "pub_date", "required": false, "defaultMatch": false, "display": true, "type": "dateTime", "canBeUsedToMatch": true },
+            { "id": "summary_th", "displayName": "summary_th", "required": false, "defaultMatch": false, "display": true, "type": "string", "canBeUsedToMatch": true },
+            { "id": "sentiment", "displayName": "sentiment", "required": false, "defaultMatch": false, "display": true, "type": "string", "canBeUsedToMatch": true },
+            { "id": "sentiment_reason", "displayName": "sentiment_reason", "required": false, "defaultMatch": false, "display": true, "type": "string", "canBeUsedToMatch": true },
+            { "id": "coins_mentioned", "displayName": "coins_mentioned", "required": false, "defaultMatch": false, "display": true, "type": "object", "canBeUsedToMatch": true },
+            { "id": "pre_score", "displayName": "pre_score", "required": false, "defaultMatch": false, "display": true, "type": "number", "canBeUsedToMatch": true },
+            { "id": "source_attribution_score", "displayName": "source_attribution_score", "required": false, "defaultMatch": false, "display": true, "type": "number", "canBeUsedToMatch": true },
+            { "id": "source_attribution_notes", "displayName": "source_attribution_notes", "required": false, "defaultMatch": false, "display": true, "type": "string", "canBeUsedToMatch": true },
+            { "id": "red_flags", "displayName": "red_flags", "required": false, "defaultMatch": false, "display": true, "type": "object", "canBeUsedToMatch": true },
+            { "id": "credibility", "displayName": "credibility", "required": false, "defaultMatch": false, "display": true, "type": "string", "canBeUsedToMatch": true },
+            { "id": "recommended_action", "displayName": "recommended_action", "required": false, "defaultMatch": false, "display": true, "type": "string", "canBeUsedToMatch": true },
+            { "id": "parse_ok", "displayName": "parse_ok", "required": false, "defaultMatch": false, "display": true, "type": "boolean", "canBeUsedToMatch": true },
+            { "id": "analyzed_at", "displayName": "analyzed_at", "required": true, "defaultMatch": false, "display": true, "type": "dateTime", "canBeUsedToMatch": true }
+          ],
+          "attemptToConvertTypes": true,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.6,
+      "position": [5088, 2320],
+      "id": "f1c0e9b1-3a4d-4d3a-9b1a-1a2b3c4d5e6f",
+      "name": "Insert news to Postgres",
+      "credentials": {
+        "postgres": {
+          "id": "YbjztJAVKFd5AfKW",
+          "name": "project_X"
+        }
+      }
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Filter: Score ≥ 3": {
+      "main": [
+        [
+          { "node": "Format Output Message1", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "Schedule Trigger1": {
+      "main": [
+        [
+          { "node": "RSS - CoinDesk1", "type": "main", "index": 0 },
+          { "node": "RSS - CoinTelegraph1", "type": "main", "index": 0 },
+          { "node": "RSS - Decrypt1", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "RSS - CoinDesk1": {
+      "main": [
+        [
+          { "node": "Merge All Feeds1", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "RSS - CoinTelegraph1": {
+      "main": [
+        [
+          { "node": "Merge All Feeds1", "type": "main", "index": 1 }
+        ]
+      ]
+    },
+    "RSS - Decrypt1": {
+      "main": [
+        [
+          { "node": "Merge All Feeds1", "type": "main", "index": 2 }
+        ]
+      ]
+    },
+    "Merge All Feeds1": {
+      "main": [
+        [
+          { "node": "Parse, Dedupe & Pre-check Attribution1", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "Parse, Dedupe & Pre-check Attribution1": {
+      "main": [
+        [
+          { "node": "Build Ollama Prompt1", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "Build Ollama Prompt1": {
+      "main": [
+        [
+          { "node": "Send to Ollama1", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "Send to Ollama1": {
+      "main": [
+        [
+          { "node": "Parse Ollama Response1", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "Parse Ollama Response1": {
+      "main": [
+        [
+          { "node": "Filter: Score ≥ 3", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "Format Output Message1": {
+      "main": [
+        [
+          { "node": "Send a message1", "type": "main", "index": 0 },
+          { "node": "Insert news to Postgres", "type": "main", "index": 0 }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "8a288f43-83ec-4145-a353-ba60329eccc3",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "ed16affd7947224748b3ca6c4f6ba99d1cfded927304821a5b90b300054e3c89"
+  },
+  "id": "kLV15RDLexLBEM3r",
+  "tags": []
+}
