@@ -11,6 +11,7 @@ import { rateLimiter } from "./rate-limit";
 import pool from "./pg-connector";
 import { fileManagerController } from "./file-manager";
 import { cryptoAnalysisController } from "./crypto-analysis";
+import { cryptoNewsController } from "./crypto-news";
 
 // pool
 const app = new Elysia()
@@ -50,7 +51,8 @@ const app = new Elysia()
       app
         .use(ocrController)
         .use(fileManagerController)
-        .use(cryptoAnalysisController),
+        .use(cryptoAnalysisController)
+        .use(cryptoNewsController),
     // .use(chatController)
   )
 

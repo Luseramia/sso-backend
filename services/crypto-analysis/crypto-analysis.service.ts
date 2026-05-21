@@ -1,6 +1,6 @@
 import dz from "../../drizzle.service";
 import { cryptoAnalysisTable } from "../../db/crypto-analysis.schema";
-import { and, desc, eq, isNull, sql } from "drizzle-orm";
+import { and, count, desc, eq, isNull, sql } from "drizzle-orm";
 
 type CryptoAnalysisInsert = typeof cryptoAnalysisTable.$inferInsert;
 
@@ -22,9 +22,15 @@ export default class CryptoAnalysisService {
     userId: number;
     timeframe?: string;
     coin?: string;
+    page?: number;
+    pageSize?: number;
   }) {
     try {
       const { userId, timeframe, coin } = params;
+      const page = Math.max(1, params.page ?? 1);
+      const pageSize = Math.min(100, Math.max(1, params.pageSize ?? 10));
+      const offset = (page - 1) * pageSize;
+
       const conds = [
         // eq(cryptoAnalysisTable.create_by_user_id, userId),
         isNull(cryptoAnalysisTable.deleted_at),
@@ -32,13 +38,28 @@ export default class CryptoAnalysisService {
       if (timeframe) conds.push(eq(cryptoAnalysisTable.timeframe, timeframe));
       if (coin) conds.push(eq(cryptoAnalysisTable.coin, coin));
 
-      const data = await dz
-        .select()
-        .from(cryptoAnalysisTable)
-        .where(and(...conds))
-        .orderBy(desc(cryptoAnalysisTable.analyzed_at));
+      const [items, totalRow] = await Promise.all([
+        dz
+          .select()
+          .from(cryptoAnalysisTable)
+          .where(and(...conds))
+          .orderBy(desc(cryptoAnalysisTable.analyzed_at))
+          .limit(pageSize)
+          .offset(offset),
+        dz
+          .select({ value: count() })
+          .from(cryptoAnalysisTable)
+          .where(and(...conds)),
+      ]);
 
-      return data;
+      const total = Number(totalRow[0]?.value ?? 0);
+      return {
+        items,
+        total,
+        page,
+        pageSize,
+        totalPages: Math.max(1, Math.ceil(total / pageSize)),
+      };
     } catch (error) {
       console.log("crypto-analysis list error", error);
       throw error;

@@ -126,41 +126,88 @@ export const fileManagerController = new Elysia().group("/file", (app) =>
     )
     .get(
       "/all/thumnail",
-      async () => {
-        const data = await uploadFileService.getFilesByCategory("video");
+      async ({ query }) => {
+        const result = await uploadFileService.getPublicFilesByCategoryPaged({
+          category: "video",
+          page: query.page ? Number(query.page) : undefined,
+          pageSize: query.pageSize ? Number(query.pageSize) : undefined,
+        });
 
         const baseUrl = "http://192.168.1.44:30304/school/thumbnails/";
-        const mapData = data.map((item) => {
-          return {
+        return {
+          items: result.items.map((item) => ({
             id: item.id,
             title: item.original_file_name,
             thumbnail: baseUrl + item.file_name + ".jpg",
-          };
-        });
-
-        return mapData;
+          })),
+          total: result.total,
+          page: result.page,
+          pageSize: result.pageSize,
+          totalPages: result.totalPages,
+        };
       },
       {
-        body: t.String(),
+        query: t.Object({
+          page: t.Optional(t.String()),
+          pageSize: t.Optional(t.String()),
+        }),
       },
     )
-    .get("/my-files", async ({ headers }) => {
+    .get(
+      "/my-files",
+      async ({ headers, query }) => {
+        const token = headers.authorization?.split(" ")[1]?.split(".")[0];
+        if (!token) {
+          return {
+            items: [],
+            total: 0,
+            page: 1,
+            pageSize: 10,
+            totalPages: 1,
+          };
+        }
+
+        const userData = Buffer.from(token, "base64").toString("utf-8");
+        const jsonData = JSON.parse(userData);
+
+        const result = await uploadFileService.getFilesByUserPaged({
+          userId: jsonData.id,
+          category: query.category || undefined,
+          page: query.page ? Number(query.page) : undefined,
+          pageSize: query.pageSize ? Number(query.pageSize) : undefined,
+        });
+
+        return {
+          items: result.items.map((item) => ({
+            id: item.id,
+            fileName: item.file_name,
+            originalName: item.original_file_name,
+            category: item.file_category,
+            isPublic: item.is_public,
+            createdAt: item.craeted_at,
+          })),
+          total: result.total,
+          page: result.page,
+          pageSize: result.pageSize,
+          totalPages: result.totalPages,
+        };
+      },
+      {
+        query: t.Object({
+          category: t.Optional(t.String()),
+          page: t.Optional(t.String()),
+          pageSize: t.Optional(t.String()),
+        }),
+      },
+    )
+    .get("/my-files/counts", async ({ headers }) => {
       const token = headers.authorization?.split(" ")[1]?.split(".")[0];
-      if (!token) return [];
+      if (!token) return { total: 0, byCategory: {} };
 
       const userData = Buffer.from(token, "base64").toString("utf-8");
       const jsonData = JSON.parse(userData);
 
-      const files = await uploadFileService.getFilesByUser(jsonData.id);
-
-      return files.map((item) => ({
-        id: item.id,
-        fileName: item.file_name,
-        originalName: item.original_file_name,
-        category: item.file_category,
-        isPublic: item.is_public,
-        createdAt: item.craeted_at,
-      }));
+      return await uploadFileService.getCategoryCountsByUser(jsonData.id);
     })
     .get("/public-files", async () => {
       const files = await uploadFileService.getPublicFiles();

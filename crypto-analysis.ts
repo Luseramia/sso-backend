@@ -94,6 +94,8 @@ export const cryptoAnalysisController = new Elysia().group(
               userId,
               timeframe: query.timeframe || undefined,
               coin: query.coin || undefined,
+              page: query.page ? Number(query.page) : undefined,
+              pageSize: query.pageSize ? Number(query.pageSize) : undefined,
             });
             return data;
           } catch (error: any) {
@@ -106,6 +108,8 @@ export const cryptoAnalysisController = new Elysia().group(
           query: t.Object({
             timeframe: t.Optional(t.String()),
             coin: t.Optional(t.String()),
+            page: t.Optional(t.String()),
+            pageSize: t.Optional(t.String()),
           }),
         },
       )
