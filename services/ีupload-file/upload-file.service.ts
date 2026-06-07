@@ -207,6 +207,74 @@ export default class UploadFileService {
     }
   }
 
+  async getPublicFilesPaged(params: {
+    category?: string;
+    page?: number;
+    pageSize?: number;
+  }) {
+    try {
+      const page = Math.max(1, params.page ?? 1);
+      const pageSize = Math.min(100, Math.max(1, params.pageSize ?? 10));
+      const offset = (page - 1) * pageSize;
+
+      const conds = [eq(fileUploadTable.is_public, true)];
+      if (params.category) {
+        conds.push(eq(fileUploadTable.file_category, params.category));
+      }
+
+      const [items, totalRow] = await Promise.all([
+        dz
+          .select()
+          .from(fileUploadTable)
+          .where(and(...conds))
+          .orderBy(desc(fileUploadTable.craeted_at))
+          .limit(pageSize)
+          .offset(offset),
+        dz
+          .select({ value: count() })
+          .from(fileUploadTable)
+          .where(and(...conds)),
+      ]);
+
+      const total = Number(totalRow[0]?.value ?? 0);
+      return {
+        items,
+        total,
+        page,
+        pageSize,
+        totalPages: Math.max(1, Math.ceil(total / pageSize)),
+      };
+    } catch (error) {
+      console.log("getPublicFilesPaged error", error);
+      throw error;
+    }
+  }
+
+  async getPublicCategoryCounts() {
+    try {
+      const rows = await dz
+        .select({
+          category: fileUploadTable.file_category,
+          c: count(),
+        })
+        .from(fileUploadTable)
+        .where(eq(fileUploadTable.is_public, true))
+        .groupBy(fileUploadTable.file_category);
+
+      const byCategory: Record<string, number> = {};
+      let total = 0;
+      for (const row of rows) {
+        const n = Number(row.c);
+        byCategory[row.category] = n;
+        total += n;
+      }
+      return { total, byCategory };
+    } catch (error) {
+      console.log("getPublicCategoryCounts error", error);
+      throw error;
+    }
+  }
+
   async updateVisibility(fileId: number, userId: number, isPublic: boolean) {
     try {
       const data = await dz

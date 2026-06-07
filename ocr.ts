@@ -214,7 +214,9 @@ export const ocrController = new Elysia().group("/ocr", (app) =>
               // parse "DD/MM/YYYY HH:mm:ss" → Date
               const [datePart, timePart] = tx.datetime.split(" ");
               const [day, month, year] = datePart.split("/").map(Number);
-              const [hours, minutes, seconds] = (timePart || "00:00:00")
+              const [hours = 0, minutes = 0, seconds = 0] = (
+                timePart || "00:00:00"
+              )
                 .split(":")
                 .map(Number);
               const dt = new Date(

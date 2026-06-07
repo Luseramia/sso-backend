@@ -209,16 +209,39 @@ export const fileManagerController = new Elysia().group("/file", (app) =>
 
       return await uploadFileService.getCategoryCountsByUser(jsonData.id);
     })
-    .get("/public-files", async () => {
-      const files = await uploadFileService.getPublicFiles();
+    .get(
+      "/public-files",
+      async ({ query }) => {
+        const result = await uploadFileService.getPublicFilesPaged({
+          category: query.category || undefined,
+          page: query.page ? Number(query.page) : undefined,
+          pageSize: query.pageSize ? Number(query.pageSize) : undefined,
+        });
 
-      return files.map((item) => ({
-        id: item.id,
-        fileName: item.file_name,
-        originalName: item.original_file_name,
-        category: item.file_category,
-        createdAt: item.craeted_at,
-      }));
+        return {
+          items: result.items.map((item) => ({
+            id: item.id,
+            fileName: item.file_name,
+            originalName: item.original_file_name,
+            category: item.file_category,
+            createdAt: item.craeted_at,
+          })),
+          total: result.total,
+          page: result.page,
+          pageSize: result.pageSize,
+          totalPages: result.totalPages,
+        };
+      },
+      {
+        query: t.Object({
+          category: t.Optional(t.String()),
+          page: t.Optional(t.String()),
+          pageSize: t.Optional(t.String()),
+        }),
+      },
+    )
+    .get("/public-files/counts", async () => {
+      return await uploadFileService.getPublicCategoryCounts();
     })
     .post(
       "/visibility",
