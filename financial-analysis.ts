@@ -1,7 +1,9 @@
 import { Elysia, t } from "elysia";
 import FinancialAnalysisService from "./services/financial-analysis/financial-analysis.service";
+import FinancialOrchestratorClient from "./services/financial-analysis/financial-orchestrator.client";
 
 const service = new FinancialAnalysisService();
+const orchestrator = new FinancialOrchestratorClient();
 
 function getUserIdFromAuth(authHeader: string | undefined): number | null {
   if (!authHeader) return null;
@@ -18,6 +20,7 @@ const valueBody = t.Object({
   periodEnd: t.String(),
   value: t.Number(),
   originalValue: t.String(),
+  sourceColumn: t.Optional(t.Number({ minimum: 1 })),
 });
 
 const rowBody = t.Object({
@@ -25,6 +28,7 @@ const rowBody = t.Object({
   canonicalCode: t.Optional(t.Union([t.String(), t.Null()])),
   confidence: t.Optional(t.Number({ minimum: 0, maximum: 1 })),
   mappingSource: t.Optional(t.String()),
+  sourceSheet: t.Optional(t.String()),
   sourceRow: t.Number({ minimum: 1 }),
   values: t.Array(valueBody, { minItems: 1 }),
 });
@@ -71,6 +75,72 @@ export const financialAnalysisController = new Elysia().group(
             sector: t.Optional(t.String({ maxLength: 160 })),
             country: t.Optional(t.String({ maxLength: 80 })),
             defaultCurrency: t.Optional(t.String({ maxLength: 10 })),
+          }),
+        },
+      )
+      .post(
+        "/ai-preview",
+        async ({ body, headers, set }) =>
+          respond(headers, set, async (userId) => {
+            const normalized = await orchestrator.normalize({
+              fileName: body.fileName,
+              statementType: "BALANCE_SHEET",
+              preferredScope: body.preferredScope,
+              currencyHint: body.currencyHint,
+              unitHint: body.unitHint,
+              sheets: body.sheets,
+            });
+            if (normalized.status !== "COMPLETED" || normalized.rows.length === 0) {
+              throw new Error(
+                normalized.warnings.join("; ") ||
+                  "AI could not normalize this financial statement",
+              );
+            }
+            const preview = await service.preview(
+              userId,
+              body.companyId,
+              normalized.rows,
+              normalized.unit,
+            );
+            return {
+              ...preview,
+              currency: normalized.currency,
+              unit: normalized.unit,
+              scope: normalized.scope,
+              normalizationWarnings: normalized.warnings,
+              requiresHumanReview: true,
+            };
+          }),
+        {
+          body: t.Object({
+            companyId: t.Number({ minimum: 1 }),
+            fileName: t.String({ minLength: 1, maxLength: 500 }),
+            preferredScope: t.Union([
+              t.Literal("CONSOLIDATED"),
+              t.Literal("SEPARATE"),
+            ]),
+            currencyHint: t.Optional(t.String({ minLength: 3, maxLength: 10 })),
+            unitHint: t.Optional(t.Union([
+              t.Literal("ONES"),
+              t.Literal("THOUSAND"),
+              t.Literal("MILLION"),
+              t.Literal("BILLION"),
+            ])),
+            sheets: t.Array(
+              t.Object({
+                name: t.String({ minLength: 1, maxLength: 255 }),
+                rows: t.Array(
+                  t.Array(t.Union([
+                    t.String(),
+                    t.Number(),
+                    t.Boolean(),
+                    t.Null(),
+                  ]), { maxItems: 100 }),
+                  { maxItems: 500 },
+                ),
+              }),
+              { minItems: 1, maxItems: 50 },
+            ),
           }),
         },
       )

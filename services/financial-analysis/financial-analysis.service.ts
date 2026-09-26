@@ -21,6 +21,7 @@ export interface ImportValue {
   periodEnd: string;
   value: number;
   originalValue: string;
+  sourceColumn?: number;
 }
 
 export interface ImportRow {
@@ -28,6 +29,7 @@ export interface ImportRow {
   canonicalCode?: string | null;
   confidence?: number;
   mappingSource?: string;
+  sourceSheet?: string;
   sourceRow: number;
   values: ImportValue[];
 }
@@ -221,7 +223,7 @@ export default class FinancialAnalysisService {
       const normalized = normalizeLabel(row.originalLabel);
       const learned = approved.get(normalized);
       const manual = row.canonicalCode && ACCOUNTS.some((account) => account.code === row.canonicalCode)
-        ? { canonicalCode: row.canonicalCode, confidence: 1, mappingSource: "MANUAL" }
+        ? { canonicalCode: row.canonicalCode, confidence: row.confidence ?? 1, mappingSource: row.mappingSource ?? "MANUAL" }
         : null;
       const mapping = manual ?? (learned
         ? { canonicalCode: learned, confidence: 0.95, mappingSource: "MANUAL" }
@@ -259,7 +261,7 @@ export default class FinancialAnalysisService {
         const [document] = await tx.insert(financialDocumentsTable).values({ company_id: payload.companyId, file_name: payload.fileName, file_type: payload.fileType, period_end: periodEnd, fiscal_year: fiscalYear, currency: payload.currency, unit: payload.unit, status: check.status === "FAIL" ? "VALIDATION_FAILED" : "READY", validation_status: check.status, validation_difference: String(check.difference), create_by_user_id: userId }).returning();
         if (!document) throw new Error("unable to create financial document");
         ids.push(document.id);
-        const valueRows = rows.flatMap((row) => { const value = row.values.find((item) => item.periodEnd === periodEnd); if (!value || !row.canonicalCode) return []; return [{ company_id: payload.companyId, document_id: document.id, canonical_code: row.canonicalCode, period_end: periodEnd, fiscal_year: fiscalYear, value: String(value.value * UNIT_MULTIPLIER[payload.unit]), currency: payload.currency, unit: payload.unit, original_label: row.originalLabel, original_value: value.originalValue, mapping_confidence: String(row.confidence ?? 1), mapping_source: row.mappingSource ?? "MANUAL", source_row: row.sourceRow, create_by_user_id: userId }]; });
+        const valueRows = rows.flatMap((row) => { const value = row.values.find((item) => item.periodEnd === periodEnd); if (!value || !row.canonicalCode) return []; return [{ company_id: payload.companyId, document_id: document.id, canonical_code: row.canonicalCode, period_end: periodEnd, fiscal_year: fiscalYear, value: String(value.value * UNIT_MULTIPLIER[payload.unit]), currency: payload.currency, unit: payload.unit, original_label: row.originalLabel, original_value: value.originalValue, mapping_confidence: String(row.confidence ?? 1), mapping_source: row.mappingSource ?? "MANUAL", source_sheet: row.sourceSheet ?? null, source_row: row.sourceRow, source_column: value.sourceColumn ?? null, create_by_user_id: userId }]; });
         if (valueRows.length) await tx.insert(financialValuesTable).values(valueRows);
       }
       const manualMappings = rows.filter((row) => row.mappingSource === "MANUAL").map((row) => ({ company_id: payload.companyId, original_label: row.originalLabel, normalized_label: normalizeLabel(row.originalLabel), canonical_code: row.canonicalCode!, confidence: String(1), mapping_source: "MANUAL", approved: 1, create_by_user_id: userId }));
@@ -276,7 +278,7 @@ export default class FinancialAnalysisService {
       dz.select().from(financialDocumentsTable).where(and(eq(financialDocumentsTable.company_id, companyId), eq(financialDocumentsTable.create_by_user_id, userId))).orderBy(desc(financialDocumentsTable.period_end), desc(financialDocumentsTable.id)),
     ]);
     const byPeriod = new Map<string, { periodEnd: string; fiscalYear: number; values: Record<string, number>; sources: Record<string, unknown> }>();
-    storedValues.forEach((row) => { const periodEnd = String(row.period_end); const period = byPeriod.get(periodEnd) ?? { periodEnd, fiscalYear: row.fiscal_year, values: {}, sources: {} }; period.values[row.canonical_code] = Number(row.value); period.sources[row.canonical_code] = { documentId: row.document_id, originalLabel: row.original_label, originalValue: row.original_value, sourceRow: row.source_row, confidence: Number(row.mapping_confidence) }; byPeriod.set(periodEnd, period); });
+    storedValues.forEach((row) => { const periodEnd = String(row.period_end); const period = byPeriod.get(periodEnd) ?? { periodEnd, fiscalYear: row.fiscal_year, values: {}, sources: {} }; period.values[row.canonical_code] = Number(row.value); period.sources[row.canonical_code] = { documentId: row.document_id, originalLabel: row.original_label, originalValue: row.original_value, sourceSheet: row.source_sheet, sourceRow: row.source_row, sourceColumn: row.source_column, confidence: Number(row.mapping_confidence) }; byPeriod.set(periodEnd, period); });
     return { company, accounts: ACCOUNTS, documents, ...buildAnalysis(Array.from(byPeriod.values())) };
   }
 }

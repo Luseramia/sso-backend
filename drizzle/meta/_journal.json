@@ -113,6 +113,13 @@
       "when": 1790385000000,
       "tag": "0015_financial_analysis",
       "breakpoints": true
+    },
+    {
+      "idx": 16,
+      "version": "7",
+      "when": 1790390000000,
+      "tag": "0016_financial_source_cells",
+      "breakpoints": true
     }
   ]
 }

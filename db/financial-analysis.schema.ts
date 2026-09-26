@@ -54,7 +54,9 @@ export const financialValuesTable = pgTable("financial_values", {
   original_value: text().notNull(),
   mapping_confidence: numeric({ precision: 5, scale: 4 }).notNull(),
   mapping_source: varchar({ length: 30 }).notNull(),
+  source_sheet: varchar({ length: 255 }),
   source_row: integer().notNull(),
+  source_column: integer(),
   create_by_user_id: integer().notNull(),
   created_at: timestamp({ withTimezone: true }).defaultNow().notNull(),
 }, (table) => [index("financial_values_company_period_idx").on(table.company_id, table.period_end)]);
