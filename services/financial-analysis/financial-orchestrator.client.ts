@@ -41,6 +41,25 @@ export interface FinancialNormalizationResponse {
   requiresHumanReview: true;
 }
 
+export interface FinancialAnalysisSummaryRequest {
+  companyName: string;
+  currency: string;
+  latestPeriod: Record<string, unknown>;
+  previousPeriod?: Record<string, unknown>;
+  growth: Record<string, unknown>;
+  directions: Array<Record<string, unknown>>;
+  signals: Array<Record<string, unknown>>;
+  deterministicSummary: string;
+}
+
+export interface FinancialAnalysisSummaryResponse {
+  status: "COMPLETED" | "FAILED";
+  summaryMarkdown: string;
+  evidenceKeys: string[];
+  warnings: string[];
+  requiresHumanReview: true;
+}
+
 const DEFAULT_ORCHESTRATOR_URL = "http://127.0.0.1:18000";
 const DEFAULT_TIMEOUT_MS = 1_300_000;
 
@@ -84,11 +103,59 @@ export default class FinancialOrchestratorClient {
     }
   }
 
+  async summarize(
+    payload: FinancialAnalysisSummaryRequest,
+  ): Promise<FinancialAnalysisSummaryResponse> {
+    const result = await this.post<FinancialAnalysisSummaryResponse>(
+      "/financial-analysis/summarize",
+      payload,
+    );
+    if (
+      !result ||
+      !["COMPLETED", "FAILED"].includes(result.status) ||
+      typeof result.summaryMarkdown !== "string" ||
+      !Array.isArray(result.evidenceKeys) ||
+      !Array.isArray(result.warnings)
+    ) {
+      throw new Error("AI orchestrator returned an invalid financial summary response");
+    }
+    return result;
+  }
+
+  private async post<T>(path: string, payload: unknown): Promise<T> {
+    const controller = new AbortController();
+    const timeoutMs = this.timeoutMs();
+    const timeout = setTimeout(() => controller.abort(), timeoutMs);
+
+    try {
+      const response = await fetch(`${this.baseUrl()}${path}`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(payload),
+        signal: controller.signal,
+      });
+      if (!response.ok) {
+        throw new Error(`AI orchestrator returned HTTP ${response.status}`);
+      }
+      return (await response.json()) as T;
+    } catch (error) {
+      if (controller.signal.aborted) {
+        throw new Error(`AI orchestrator timed out after ${timeoutMs} ms`);
+      }
+      throw error;
+    } finally {
+      clearTimeout(timeout);
+    }
+  }
+
   private normalizeUrl() {
-    const baseUrl = (
+    return `${this.baseUrl()}/financial-statements/normalize`;
+  }
+
+  private baseUrl() {
+    return (
       process.env.AI_ORCHESTRATOR_REST_URL?.trim() || DEFAULT_ORCHESTRATOR_URL
     ).replace(/\/+$/, "");
-    return `${baseUrl}/financial-statements/normalize`;
   }
 
   private timeoutMs() {

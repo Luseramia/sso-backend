@@ -2,6 +2,7 @@ import {
   date,
   index,
   integer,
+  jsonb,
   numeric,
   pgTable,
   text,
@@ -23,9 +24,22 @@ export const financialCompaniesTable = pgTable("financial_companies", {
   updated_at: timestamp({ withTimezone: true }).defaultNow().notNull(),
 }, (table) => [index("financial_companies_owner_idx").on(table.create_by_user_id)]);
 
+export const financialImportSourcesTable = pgTable("financial_import_sources", {
+  id: integer().primaryKey().generatedAlwaysAsIdentity(),
+  company_id: integer().notNull(),
+  file_name: varchar({ length: 500 }).notNull(),
+  file_type: varchar({ length: 30 }).notNull(),
+  scope: varchar({ length: 30 }).notNull(),
+  raw_hash: varchar({ length: 64 }).notNull(),
+  raw_payload: jsonb().notNull(),
+  create_by_user_id: integer().notNull(),
+  created_at: timestamp({ withTimezone: true }).defaultNow().notNull(),
+}, (table) => [index("financial_import_sources_owner_idx").on(table.create_by_user_id)]);
+
 export const financialDocumentsTable = pgTable("financial_documents", {
   id: integer().primaryKey().generatedAlwaysAsIdentity(),
   company_id: integer().notNull(),
+  source_id: integer(),
   file_name: varchar({ length: 500 }).notNull(),
   file_type: varchar({ length: 30 }).notNull(),
   statement_type: varchar({ length: 40 }).default("BALANCE_SHEET").notNull(),

@@ -3,6 +3,7 @@ import {
   autoMap,
   buildAnalysis,
   calculateMetrics,
+  mappingsReadyForImport,
   normalizeLabel,
   validate,
 } from "./financial-analysis.service";
@@ -61,5 +62,16 @@ describe("financial analysis deterministic engine", () => {
     ]);
     expect(analysis.signals.some((signal) => signal.id === "INCREASING_LEVERAGE")).toBe(true);
     expect(analysis.signals.find((signal) => signal.id === "INCREASING_LEVERAGE")?.evidence.length).toBeGreaterThan(0);
+  });
+
+  test("requires manual approval for low-confidence mappings", () => {
+    const base = {
+      originalLabel: "Cash",
+      canonicalCode: "ASSET.CASH",
+      sourceRow: 1,
+      values: [{ periodEnd: "2026-06-30", value: 10, originalValue: "10" }],
+    };
+    expect(mappingsReadyForImport([{ ...base, confidence: 0.69, mappingSource: "AI" }])).toBe(false);
+    expect(mappingsReadyForImport([{ ...base, confidence: 1, mappingSource: "MANUAL" }])).toBe(true);
   });
 });

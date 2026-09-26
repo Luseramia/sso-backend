@@ -33,6 +33,19 @@ const rowBody = t.Object({
   values: t.Array(valueBody, { minItems: 1 }),
 });
 
+const workbookSheetBody = t.Object({
+  name: t.String({ minLength: 1, maxLength: 255 }),
+  rows: t.Array(
+    t.Array(t.Union([
+      t.String(),
+      t.Number(),
+      t.Boolean(),
+      t.Null(),
+    ]), { maxItems: 100 }),
+    { maxItems: 500 },
+  ),
+});
+
 const respond = async (
   headers: Record<string, string | undefined>,
   set: { status?: number | string },
@@ -126,21 +139,7 @@ export const financialAnalysisController = new Elysia().group(
               t.Literal("MILLION"),
               t.Literal("BILLION"),
             ])),
-            sheets: t.Array(
-              t.Object({
-                name: t.String({ minLength: 1, maxLength: 255 }),
-                rows: t.Array(
-                  t.Array(t.Union([
-                    t.String(),
-                    t.Number(),
-                    t.Boolean(),
-                    t.Null(),
-                  ]), { maxItems: 100 }),
-                  { maxItems: 500 },
-                ),
-              }),
-              { minItems: 1, maxItems: 50 },
-            ),
+            sheets: t.Array(workbookSheetBody, { minItems: 1, maxItems: 50 }),
           }),
         },
       )
@@ -180,8 +179,21 @@ export const financialAnalysisController = new Elysia().group(
               t.Literal("BILLION"),
             ]),
             rows: t.Array(rowBody, { minItems: 1 }),
+            rawSource: t.Optional(t.Object({
+              scope: t.Union([
+                t.Literal("CONSOLIDATED"),
+                t.Literal("SEPARATE"),
+              ]),
+              sheets: t.Array(workbookSheetBody, { minItems: 1, maxItems: 50 }),
+            })),
           }),
         },
+      )
+      .get(
+        "/documents/:id/source",
+        async ({ params, headers, set }) =>
+          respond(headers, set, (userId) => service.source(userId, Number(params.id))),
+        { params: t.Object({ id: t.Numeric() }) },
       )
       .get(
         "/companies/:id/dashboard",
@@ -228,6 +240,32 @@ export const financialAnalysisController = new Elysia().group(
           respond(headers, set, async (userId) => {
             const dashboard = await service.dashboard(userId, Number(params.id));
             return { summary: dashboard.summary, source: "DETERMINISTIC_METRICS", signals: dashboard.signals.map((signal) => signal.id) };
+          }),
+        { params: t.Object({ id: t.Numeric() }) },
+      )
+      .post(
+        "/companies/:id/financial-summary",
+        async ({ params, headers, set }) =>
+          respond(headers, set, async (userId) => {
+            const dashboard = await service.dashboard(userId, Number(params.id));
+            const latest = dashboard.periods.at(-1);
+            if (!latest) throw new Error("financial data not found");
+            const previous = dashboard.periods.at(-2);
+            return orchestrator.summarize({
+              companyName: dashboard.company.name,
+              currency: dashboard.company.default_currency,
+              latestPeriod: {
+                periodEnd: latest.periodEnd,
+                metrics: latest.metrics,
+              },
+              previousPeriod: previous
+                ? { periodEnd: previous.periodEnd, metrics: previous.metrics }
+                : undefined,
+              growth: { ...(dashboard.growth ?? {}) },
+              directions: dashboard.directions.map((item) => ({ ...item })),
+              signals: dashboard.signals.map((item) => ({ ...item })),
+              deterministicSummary: dashboard.summary,
+            });
           }),
         { params: t.Object({ id: t.Numeric() }) },
       ),

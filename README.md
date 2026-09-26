@@ -43,5 +43,14 @@ AI_ORCHESTRATOR_REST_URL=http://ai-orchestrator.codex.svc.cluster.local:8000
 The AI only identifies workbook structure and canonical mappings. The
 orchestrator verifies returned numbers against their source sheet/row/column,
 and `bun-sso` still performs the accounting-equation validation before import.
+The confirmed import stores the original workbook cell matrix once in
+`financial_import_sources`, hashes it for audit, and links every period document
+back to that source. `GET /financial-analysis/documents/:id/source` retrieves it
+for the owning user.
+
+`POST /financial-analysis/companies/:id/financial-summary` sends only computed
+metrics, growth, directions, and evidence-bearing signals to the orchestrator.
+It does not send raw workbook rows and falls back to the deterministic summary
+when model generation fails.
 
 This project was created using `bun init` in bun v1.2.14. [Bun](https://bun.sh) is a fast all-in-one JavaScript runtime.

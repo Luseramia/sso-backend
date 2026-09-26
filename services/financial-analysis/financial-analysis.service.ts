@@ -3,6 +3,7 @@ import {
   financialAccountMappingsTable,
   financialCompaniesTable,
   financialDocumentsTable,
+  financialImportSourcesTable,
   financialValuesTable,
 } from "../../db/financial-analysis.schema";
 import dz from "../../drizzle.service";
@@ -41,6 +42,13 @@ export interface ImportPayload {
   currency: string;
   unit: Unit;
   rows: ImportRow[];
+  rawSource?: {
+    scope: "CONSOLIDATED" | "SEPARATE";
+    sheets: Array<{
+      name: string;
+      rows: Array<Array<string | number | boolean | null>>;
+    }>;
+  };
 }
 
 const ACCOUNTS: CanonicalAccount[] = [
@@ -101,6 +109,12 @@ const ALIASES: Record<string, string> = {
 
 const UNIT_MULTIPLIER: Record<Unit, number> = { ONES: 1, THOUSAND: 1_000, MILLION: 1_000_000, BILLION: 1_000_000_000 };
 
+async function sha256(value: string) {
+  const bytes = new TextEncoder().encode(value);
+  const digest = await crypto.subtle.digest("SHA-256", bytes);
+  return Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, "0")).join("");
+}
+
 export function normalizeLabel(label: string) {
   return label.normalize("NFKC").toLowerCase().replace(/&/g, " and ").replace(/[()\[\]{}.,:;_/\\-]+/g, " ").replace(/\s+/g, " ").trim();
 }
@@ -122,6 +136,14 @@ export function autoMap(label: string) {
   const rule = keywordMapping(normalized);
   if (rule) return { canonicalCode: rule, confidence: 0.82, mappingSource: "RULE" };
   return { canonicalCode: null, confidence: 0, mappingSource: "MANUAL" };
+}
+
+export function mappingsReadyForImport(rows: ImportRow[]) {
+  return rows.every((row) =>
+    Boolean(row.canonicalCode) &&
+    ACCOUNTS.some((account) => account.code === row.canonicalCode) &&
+    (row.confidence ?? 0) >= 0.7,
+  );
 }
 
 const safeDivide = (left: number, right: number) => (right === 0 ? null : left / right);
@@ -243,8 +265,8 @@ export default class FinancialAnalysisService {
 
   async import(userId: number, payload: ImportPayload) {
     await this.assertCompany(userId, payload.companyId);
-    const rows = payload.rows.filter((row) => row.canonicalCode && ACCOUNTS.some((account) => account.code === row.canonicalCode));
-    if (rows.length !== payload.rows.length) throw new Error("all rows must be mapped before import");
+    if (!mappingsReadyForImport(payload.rows)) throw new Error("all rows must be mapped and low-confidence mappings approved before import");
+    const rows = payload.rows;
     const periods = Array.from(new Set(rows.flatMap((row) => row.values.map((value) => value.periodEnd)))).sort();
     const existingValues = await dz.select({ canonicalCode: financialValuesTable.canonical_code, periodEnd: financialValuesTable.period_end })
       .from(financialValuesTable)
@@ -253,12 +275,17 @@ export default class FinancialAnalysisService {
     const duplicate = existingValues.find((value) => incomingKeys.has(`${String(value.periodEnd)}:${value.canonicalCode}`));
     if (duplicate) throw new Error(`duplicate financial value: ${duplicate.canonicalCode} (${String(duplicate.periodEnd)})`);
     const validation = periods.map((periodEnd) => { const values: Record<string, number> = {}; rows.forEach((row) => { const value = row.values.find((item) => item.periodEnd === periodEnd); if (value && row.canonicalCode) values[row.canonicalCode] = (values[row.canonicalCode] ?? 0) + value.value * UNIT_MULTIPLIER[payload.unit]; }); return { periodEnd, ...validate(values) }; });
+    const rawPayload = payload.rawSource ? JSON.stringify(payload.rawSource) : null;
+    const rawHash = rawPayload ? await sha256(rawPayload) : null;
     const documentIds = await dz.transaction(async (tx) => {
+      const [source] = rawPayload && rawHash
+        ? await tx.insert(financialImportSourcesTable).values({ company_id: payload.companyId, file_name: payload.fileName, file_type: payload.fileType, scope: payload.rawSource!.scope, raw_hash: rawHash, raw_payload: payload.rawSource!, create_by_user_id: userId }).returning()
+        : [];
       const ids: number[] = [];
       for (const periodEnd of periods) {
         const fiscalYear = Number(periodEnd.slice(0, 4));
         const check = validation.find((item) => item.periodEnd === periodEnd)!;
-        const [document] = await tx.insert(financialDocumentsTable).values({ company_id: payload.companyId, file_name: payload.fileName, file_type: payload.fileType, period_end: periodEnd, fiscal_year: fiscalYear, currency: payload.currency, unit: payload.unit, status: check.status === "FAIL" ? "VALIDATION_FAILED" : "READY", validation_status: check.status, validation_difference: String(check.difference), create_by_user_id: userId }).returning();
+        const [document] = await tx.insert(financialDocumentsTable).values({ company_id: payload.companyId, source_id: source?.id ?? null, file_name: payload.fileName, file_type: payload.fileType, period_end: periodEnd, fiscal_year: fiscalYear, currency: payload.currency, unit: payload.unit, status: check.status === "FAIL" ? "VALIDATION_FAILED" : "READY", validation_status: check.status, validation_difference: String(check.difference), create_by_user_id: userId }).returning();
         if (!document) throw new Error("unable to create financial document");
         ids.push(document.id);
         const valueRows = rows.flatMap((row) => { const value = row.values.find((item) => item.periodEnd === periodEnd); if (!value || !row.canonicalCode) return []; return [{ company_id: payload.companyId, document_id: document.id, canonical_code: row.canonicalCode, period_end: periodEnd, fiscal_year: fiscalYear, value: String(value.value * UNIT_MULTIPLIER[payload.unit]), currency: payload.currency, unit: payload.unit, original_label: row.originalLabel, original_value: value.originalValue, mapping_confidence: String(row.confidence ?? 1), mapping_source: row.mappingSource ?? "MANUAL", source_sheet: row.sourceSheet ?? null, source_row: row.sourceRow, source_column: value.sourceColumn ?? null, create_by_user_id: userId }]; });
@@ -269,6 +296,14 @@ export default class FinancialAnalysisService {
       return ids;
     });
     return { documentIds, validation };
+  }
+
+  async source(userId: number, documentId: number) {
+    const [document] = await dz.select().from(financialDocumentsTable).where(and(eq(financialDocumentsTable.id, documentId), eq(financialDocumentsTable.create_by_user_id, userId))).limit(1);
+    if (!document) throw new Error("financial document not found");
+    if (!document.source_id) return null;
+    const [source] = await dz.select().from(financialImportSourcesTable).where(and(eq(financialImportSourcesTable.id, document.source_id), eq(financialImportSourcesTable.create_by_user_id, userId))).limit(1);
+    return source ?? null;
   }
 
   async dashboard(userId: number, companyId: number) {

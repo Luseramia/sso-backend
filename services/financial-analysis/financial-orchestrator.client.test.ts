@@ -46,4 +46,36 @@ describe("FinancialOrchestratorClient", () => {
     expect(result.status).toBe("COMPLETED");
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });
+
+  test("sends only structured analysis data to the summary endpoint", async () => {
+    process.env.AI_ORCHESTRATOR_REST_URL = "http://127.0.0.1:18000";
+    const fetchMock = mock(async (input: string | URL | Request, init?: RequestInit) => {
+      expect(String(input)).toBe("http://127.0.0.1:18000/financial-analysis/summarize");
+      expect(init?.headers).toEqual({ "content-type": "application/json" });
+      const body = JSON.parse(String(init?.body));
+      expect(body.latestPeriod.metrics.totalAssets).toBe(120);
+      expect(body).not.toHaveProperty("rows");
+      return new Response(JSON.stringify({
+        status: "COMPLETED",
+        summaryMarkdown: "สินทรัพย์เพิ่มขึ้นตามข้อมูลที่ตรวจสอบแล้ว",
+        evidenceKeys: ["latestPeriod.metrics.totalAssets"],
+        warnings: [],
+        requiresHumanReview: true,
+      }), { status: 200, headers: { "content-type": "application/json" } });
+    });
+    globalThis.fetch = fetchMock as unknown as typeof fetch;
+
+    const result = await new FinancialOrchestratorClient().summarize({
+      companyName: "Example PCL",
+      currency: "THB",
+      latestPeriod: { periodEnd: "2026-06-30", metrics: { totalAssets: 120 } },
+      growth: { assets: 20 },
+      directions: [],
+      signals: [],
+      deterministicSummary: "Assets increased.",
+    });
+
+    expect(result.evidenceKeys).toEqual(["latestPeriod.metrics.totalAssets"]);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
 });
