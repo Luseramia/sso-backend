@@ -12,6 +12,7 @@ import pool from "./pg-connector";
 import { fileManagerController } from "./file-manager";
 import { cryptoAnalysisController } from "./crypto-analysis";
 import { cryptoNewsController } from "./crypto-news";
+import { financialAnalysisController } from "./financial-analysis";
 
 // pool
 const app = new Elysia()
@@ -52,7 +53,8 @@ const app = new Elysia()
         .use(ocrController)
         .use(fileManagerController)
         .use(cryptoAnalysisController)
-        .use(cryptoNewsController),
+        .use(cryptoNewsController)
+        .use(financialAnalysisController),
     // .use(chatController)
   )
 

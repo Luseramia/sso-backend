@@ -1,0 +1,74 @@
+import {
+  date,
+  index,
+  integer,
+  numeric,
+  pgTable,
+  text,
+  timestamp,
+  varchar,
+} from "drizzle-orm/pg-core";
+
+export const financialCompaniesTable = pgTable("financial_companies", {
+  id: integer().primaryKey().generatedAlwaysAsIdentity(),
+  name: varchar({ length: 240 }).notNull(),
+  ticker: varchar({ length: 30 }),
+  market: varchar({ length: 80 }),
+  industry: varchar({ length: 160 }),
+  sector: varchar({ length: 160 }),
+  country: varchar({ length: 80 }).default("TH"),
+  default_currency: varchar({ length: 10 }).default("THB").notNull(),
+  create_by_user_id: integer().notNull(),
+  created_at: timestamp({ withTimezone: true }).defaultNow().notNull(),
+  updated_at: timestamp({ withTimezone: true }).defaultNow().notNull(),
+}, (table) => [index("financial_companies_owner_idx").on(table.create_by_user_id)]);
+
+export const financialDocumentsTable = pgTable("financial_documents", {
+  id: integer().primaryKey().generatedAlwaysAsIdentity(),
+  company_id: integer().notNull(),
+  file_name: varchar({ length: 500 }).notNull(),
+  file_type: varchar({ length: 30 }).notNull(),
+  statement_type: varchar({ length: 40 }).default("BALANCE_SHEET").notNull(),
+  period_end: date().notNull(),
+  fiscal_year: integer().notNull(),
+  currency: varchar({ length: 10 }).notNull(),
+  unit: varchar({ length: 20 }).notNull(),
+  status: varchar({ length: 40 }).default("READY").notNull(),
+  validation_status: varchar({ length: 20 }).notNull(),
+  validation_difference: numeric({ precision: 30, scale: 4 }).notNull(),
+  create_by_user_id: integer().notNull(),
+  created_at: timestamp({ withTimezone: true }).defaultNow().notNull(),
+});
+
+export const financialValuesTable = pgTable("financial_values", {
+  id: integer().primaryKey().generatedAlwaysAsIdentity(),
+  company_id: integer().notNull(),
+  document_id: integer().notNull(),
+  canonical_code: varchar({ length: 100 }).notNull(),
+  period_end: date().notNull(),
+  fiscal_year: integer().notNull(),
+  value: numeric({ precision: 30, scale: 4 }).notNull(),
+  currency: varchar({ length: 10 }).notNull(),
+  unit: varchar({ length: 20 }).notNull(),
+  original_label: text().notNull(),
+  original_value: text().notNull(),
+  mapping_confidence: numeric({ precision: 5, scale: 4 }).notNull(),
+  mapping_source: varchar({ length: 30 }).notNull(),
+  source_row: integer().notNull(),
+  create_by_user_id: integer().notNull(),
+  created_at: timestamp({ withTimezone: true }).defaultNow().notNull(),
+}, (table) => [index("financial_values_company_period_idx").on(table.company_id, table.period_end)]);
+
+export const financialAccountMappingsTable = pgTable("financial_account_mappings", {
+  id: integer().primaryKey().generatedAlwaysAsIdentity(),
+  company_id: integer(),
+  original_label: text().notNull(),
+  normalized_label: text().notNull(),
+  canonical_code: varchar({ length: 100 }).notNull(),
+  confidence: numeric({ precision: 5, scale: 4 }).notNull(),
+  mapping_source: varchar({ length: 30 }).notNull(),
+  approved: integer().default(1).notNull(),
+  create_by_user_id: integer().notNull(),
+  created_at: timestamp({ withTimezone: true }).defaultNow().notNull(),
+  updated_at: timestamp({ withTimezone: true }).defaultNow().notNull(),
+}, (table) => [index("financial_mappings_owner_label_idx").on(table.create_by_user_id, table.normalized_label)]);
