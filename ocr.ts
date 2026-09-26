@@ -212,17 +212,20 @@ export const ocrController = new Elysia().group("/ocr", (app) =>
           try {
             const rows = transactions.map((tx) => {
               // parse "DD/MM/YYYY HH:mm:ss" → Date
-              const [datePart, timePart] = tx.datetime.split(" ");
+              const [datePart = "", timePart = ""] = tx.datetime.split(" ");
               const [day, month, year] = datePart.split("/").map(Number);
+              if (![day, month, year].every((value) => value !== undefined && Number.isFinite(value))) {
+                throw new Error(`Invalid transaction datetime: ${tx.datetime}`);
+              }
               const [hours = 0, minutes = 0, seconds = 0] = (
                 timePart || "00:00:00"
               )
                 .split(":")
                 .map(Number);
               const dt = new Date(
-                year,
-                month - 1,
-                day,
+                year!,
+                month! - 1,
+                day!,
                 hours,
                 minutes,
                 seconds,
