@@ -1,9 +1,22 @@
 import { Elysia, t } from "elysia";
 import FinancialAnalysisService from "./services/financial-analysis/financial-analysis.service";
 import FinancialOrchestratorClient from "./services/financial-analysis/financial-orchestrator.client";
+import FinancialAiPreviewJobStore from "./services/financial-analysis/financial-ai-preview-job.store";
+import type { FinancialScope, WorkbookSheet } from "./services/financial-analysis/financial-orchestrator.client";
+import type { Unit } from "./services/financial-analysis/financial-analysis.service";
 
 const service = new FinancialAnalysisService();
 const orchestrator = new FinancialOrchestratorClient();
+const aiPreviewJobs = new FinancialAiPreviewJobStore();
+
+interface AiPreviewBody {
+  companyId: number;
+  fileName: string;
+  preferredScope: FinancialScope;
+  currencyHint?: string;
+  unitHint?: Unit;
+  sheets: WorkbookSheet[];
+}
 
 function getUserIdFromAuth(authHeader: string | undefined): number | null {
   if (!authHeader) return null;
@@ -46,6 +59,68 @@ const workbookSheetBody = t.Object({
   ),
 });
 
+const aiPreviewBody = t.Object({
+  companyId: t.Number({ minimum: 1 }),
+  fileName: t.String({ minLength: 1, maxLength: 500 }),
+  preferredScope: t.Union([
+    t.Literal("CONSOLIDATED"),
+    t.Literal("SEPARATE"),
+  ]),
+  currencyHint: t.Optional(t.String({ minLength: 3, maxLength: 10 })),
+  unitHint: t.Optional(t.Union([
+    t.Literal("ONES"),
+    t.Literal("THOUSAND"),
+    t.Literal("MILLION"),
+    t.Literal("BILLION"),
+  ])),
+  sheets: t.Array(workbookSheetBody, { minItems: 1, maxItems: 50 }),
+});
+
+const buildAiPreview = async (userId: number, body: AiPreviewBody) => {
+  const normalized = await orchestrator.normalize({
+    fileName: body.fileName,
+    statementType: "BALANCE_SHEET",
+    preferredScope: body.preferredScope,
+    currencyHint: body.currencyHint,
+    unitHint: body.unitHint,
+    sheets: body.sheets,
+  });
+  if (normalized.status !== "COMPLETED" || normalized.rows.length === 0) {
+    throw new Error(
+      normalized.warnings.join("; ") ||
+        "AI could not normalize this financial statement",
+    );
+  }
+  const preview = await service.preview(
+    userId,
+    body.companyId,
+    normalized.rows,
+    normalized.unit,
+  );
+  return {
+    ...preview,
+    currency: normalized.currency,
+    unit: normalized.unit,
+    scope: normalized.scope,
+    normalizationWarnings: normalized.warnings,
+    requiresHumanReview: true as const,
+  };
+};
+
+const processAiPreviewJob = async (
+  jobId: string,
+  userId: number,
+  body: AiPreviewBody,
+) => {
+  try {
+    await aiPreviewJobs.markProcessing(jobId);
+    await aiPreviewJobs.complete(jobId, await buildAiPreview(userId, body));
+  } catch (error) {
+    console.error("financial AI preview job failed", error);
+    await aiPreviewJobs.fail(jobId, error);
+  }
+};
+
 const respond = async (
   headers: Record<string, string | undefined>,
   set: { status?: number | string },
@@ -60,7 +135,9 @@ const respond = async (
     return { data: await action(userId) };
   } catch (error: any) {
     console.error("financial-analysis error", error);
-    set.status = error.message === "company not found" ? 404 : 400;
+    set.status = ["company not found", "AI preview job not found"].includes(error.message)
+      ? 404
+      : 400;
     return { error: error.message || "financial analysis request failed" };
   }
 };
@@ -94,54 +171,29 @@ export const financialAnalysisController = new Elysia().group(
       .post(
         "/ai-preview",
         async ({ body, headers, set }) =>
-          respond(headers, set, async (userId) => {
-            const normalized = await orchestrator.normalize({
-              fileName: body.fileName,
-              statementType: "BALANCE_SHEET",
-              preferredScope: body.preferredScope,
-              currencyHint: body.currencyHint,
-              unitHint: body.unitHint,
-              sheets: body.sheets,
-            });
-            if (normalized.status !== "COMPLETED" || normalized.rows.length === 0) {
-              throw new Error(
-                normalized.warnings.join("; ") ||
-                  "AI could not normalize this financial statement",
-              );
-            }
-            const preview = await service.preview(
-              userId,
-              body.companyId,
-              normalized.rows,
-              normalized.unit,
-            );
-            return {
-              ...preview,
-              currency: normalized.currency,
-              unit: normalized.unit,
-              scope: normalized.scope,
-              normalizationWarnings: normalized.warnings,
-              requiresHumanReview: true,
-            };
-          }),
+          respond(headers, set, (userId) => buildAiPreview(userId, body)),
         {
-          body: t.Object({
-            companyId: t.Number({ minimum: 1 }),
-            fileName: t.String({ minLength: 1, maxLength: 500 }),
-            preferredScope: t.Union([
-              t.Literal("CONSOLIDATED"),
-              t.Literal("SEPARATE"),
-            ]),
-            currencyHint: t.Optional(t.String({ minLength: 3, maxLength: 10 })),
-            unitHint: t.Optional(t.Union([
-              t.Literal("ONES"),
-              t.Literal("THOUSAND"),
-              t.Literal("MILLION"),
-              t.Literal("BILLION"),
-            ])),
-            sheets: t.Array(workbookSheetBody, { minItems: 1, maxItems: 50 }),
-          }),
+          body: aiPreviewBody,
         },
+      )
+      .post(
+        "/ai-preview-jobs",
+        async ({ body, headers, set }) =>
+          respond(headers, set, async (userId) => {
+            await service.assertCompany(userId, body.companyId);
+            const job = await aiPreviewJobs.create(userId);
+            setTimeout(() => {
+              void processAiPreviewJob(job.jobId, userId, body);
+            }, 0);
+            return job;
+          }),
+        { body: aiPreviewBody },
+      )
+      .get(
+        "/ai-preview-jobs/:jobId",
+        async ({ params, headers, set }) =>
+          respond(headers, set, (userId) => aiPreviewJobs.get(userId, params.jobId)),
+        { params: t.Object({ jobId: t.String({ minLength: 1, maxLength: 80 }) }) },
       )
       .post(
         "/preview",

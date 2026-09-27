@@ -226,7 +226,7 @@ export default class FinancialAnalysisService {
     return company;
   }
 
-  private async assertCompany(userId: number, companyId: number) {
+  async assertCompany(userId: number, companyId: number) {
     const [company] = await dz.select().from(financialCompaniesTable).where(and(eq(financialCompaniesTable.id, companyId), eq(financialCompaniesTable.create_by_user_id, userId))).limit(1);
     if (!company) throw new Error("company not found");
     return company;
