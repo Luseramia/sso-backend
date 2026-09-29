@@ -9,16 +9,28 @@ bun install
 To run:
 
 ```bash
-bun run index.ts
+bun run dev
 ```
 
 ## Financial statement AI normalizer
 
-The `/financial-analysis/ai-preview` route sends workbook cells to the existing
-AI orchestrator and returns the normal financial-analysis preview. No LLM or
-gateway credential is required in this service. For local development, forward
-the Kubernetes `ai-orchestrator` Service to port 18000. These are the built-in
-defaults, so no `.env` change is required for the normal local setup:
+The `/financial-analysis/ai-preview-jobs` route sends workbook cells to the
+existing AI orchestrator in the background. The frontend polls the returned job
+through `/financial-analysis/ai-preview-jobs/:jobId`, so the browser request is
+not held open for the full inference time. No LLM or gateway credential is
+required in this service.
+
+When `ai-orchestrator` runs locally on port 8000, add this to `.env` before
+starting `bun-sso`:
+
+```env
+AI_ORCHESTRATOR_REST_URL=http://127.0.0.1:8000
+AI_ORCHESTRATOR_TIMEOUT_MS=1300000
+```
+
+Alternatively, forward the Kubernetes `ai-orchestrator` Service to port 18000.
+Port 18000 is the built-in fallback, so this setup does not require an `.env`
+override:
 
 ```powershell
 # Run from the ai-orchestrator repository. Add -SshHost when kubectl is remote.
@@ -28,11 +40,6 @@ defaults, so no `.env` change is required for the normal local setup:
 For the current remote kubectl host, add
 `-SshHost tarchunk@192.168.1.51` and keep that terminal open while using the
 local backend.
-
-```env
-AI_ORCHESTRATOR_REST_URL=http://127.0.0.1:18000
-AI_ORCHESTRATOR_TIMEOUT_MS=1300000
-```
 
 When this backend runs in the cluster, use:
 

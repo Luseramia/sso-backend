@@ -13,7 +13,7 @@
     "typescript": "^5"
   },
   "scripts": {
-    "dev": "bun --hot index.js"
+    "dev": "bun --hot index.ts"
   },
   "dependencies": {
     "@elysiajs/cors": "^1.4.0",
