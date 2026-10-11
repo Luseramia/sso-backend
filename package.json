@@ -13,7 +13,9 @@
     "typescript": "^5"
   },
   "scripts": {
-    "dev": "bun --hot index.ts"
+    "dev": "bun --hot index.ts",
+    "migrate:quant": "bun scripts/migrate-quant.ts",
+    "test:quant": "bun test services/quant/quant.service.test.ts"
   },
   "dependencies": {
     "@elysiajs/cors": "^1.4.0",
