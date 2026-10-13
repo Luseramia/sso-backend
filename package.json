@@ -15,6 +15,7 @@
   "scripts": {
     "dev": "bun --hot index.ts",
     "migrate:quant": "bun scripts/migrate-quant.ts",
+    "migrate:investments": "bun scripts/migrate-investments.ts",
     "test:quant": "bun test services/quant/quant.service.test.ts"
   },
   "dependencies": {

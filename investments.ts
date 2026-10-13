@@ -23,6 +23,7 @@ const holdingBody = t.Object({
   quantity: t.Number({ minimum: 0 }),
   total_cost: t.Number({ minimum: 0 }),
   current_price: t.Number({ minimum: 0 }),
+  currency: t.Optional(t.Union([t.Literal("THB"), t.Literal("USD")])),
   purchase_date: t.String(),
   notes: t.String({ maxLength: 2000 }),
 });
@@ -66,6 +67,7 @@ export const investmentsController = new Elysia().group(
               quantity: String(body.quantity),
               total_cost: String(body.total_cost),
               current_price: String(body.current_price),
+              currency: body.currency ?? "THB",
               purchase_date: body.purchase_date,
               notes: body.notes.trim() || null,
               create_by_user_id: userId,
@@ -100,6 +102,7 @@ export const investmentsController = new Elysia().group(
               quantity: String(body.quantity),
               total_cost: String(body.total_cost),
               current_price: String(body.current_price),
+              ...(body.currency ? { currency: body.currency } : {}),
               purchase_date: body.purchase_date,
               notes: body.notes.trim() || null,
             });
